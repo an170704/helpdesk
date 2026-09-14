@@ -1,7 +1,9 @@
 const express = require('express');
 const pool = require('./config/db');
+const authRoutes = require('./modules/auth/auth.routes');
 
 const app = express();
+
 app.use(express.json());
 
 app.get('/health', async (req, res) => {
@@ -11,6 +13,19 @@ app.get('/health', async (req, res) => {
   } catch (err) {
     res.status(500).json({ status: 'error', db: 'error', message: err.message });
   }
+});
+
+app.use('/api/auth', authRoutes);
+
+app.use((req, res) => {
+  res.status(404).json({ message: 'Không tìm thấy tài nguyên' });
+});
+
+app.use((err, req, res, next) => {
+  if (!err.status || err.status >= 500) {
+    console.error(err);
+  }
+  res.status(err.status || 500).json({ message: err.message || 'Lỗi máy chủ' });
 });
 
 module.exports = app;
