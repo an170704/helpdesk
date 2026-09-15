@@ -1,6 +1,7 @@
 const express = require('express');
 const pool = require('./config/db');
 const authRoutes = require('./modules/auth/auth.routes');
+const ticketRoutes = require('./modules/tickets/ticket.routes');
 
 const app = express();
 
@@ -16,6 +17,7 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/tickets', ticketRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Không tìm thấy tài nguyên' });
