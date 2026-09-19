@@ -2,11 +2,11 @@
 
 Course: CT502H - Luận văn tốt nghiệp.
 
-Semester 1, Academic year: 2026-2027
+Semester 1, Academic year: 2026-2027.
 
 **Student ID**: B2205970.
 
-**Student nam**: Lâm Thành An.
+**Student name**: Lâm Thành An.
 
 ---
 
