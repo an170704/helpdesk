@@ -1,31 +1,70 @@
 const pool = require('../../config/db');
 const withTransaction = require('../../utils/withTransaction');
 const AppError = require('../../utils/AppError');
+const aiClient = require('../../services/aiClient');
+const categoryService = require('../categories/category.service');
 const { ALLOWED_TRANSITIONS } = require('./ticket.constants');
 
+// SELECT chung: join categories để lấy category_name hiển thị
+const TICKET_SELECT = `
+  SELECT t.*, c.name AS category_name
+  FROM tickets t
+  LEFT JOIN categories c ON c.id = t.category_id
+`;
+
 async function create({ subject, description, createdBy }) {
-  return withTransaction(async (client) => {
+  const ticket = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO tickets (subject, description, created_by)
        VALUES ($1, $2, $3)
        RETURNING *`,
       [subject, description, createdBy]
     );
-    const ticket = rows[0];
+    const createdTicket = rows[0];
 
     await client.query(
       `INSERT INTO ticket_history (ticket_id, actor_id, action, to_status)
        VALUES ($1, $2, 'created', $3)`,
-      [ticket.id, createdBy, ticket.status]
+      [createdTicket.id, createdBy, createdTicket.status]
     );
 
-    return ticket;
+    return createdTicket;
   });
+
+  return await classify(ticket);
+}
+
+// Gọi AI phân loại, lưu category_id + confidence vào ticket.
+// AI lỗi thì vẫn giữ ticket (category null), không chặn user tạo ticket.
+async function classify(ticket) {
+  try {
+    const { category, confidence } = await aiClient.predictCategory({
+      subject: ticket.subject,
+      description: ticket.description,
+    });
+
+    const categoryId = await categoryService.findIdByName(category);
+    if (!categoryId) {
+      return ticket;
+    }
+
+    await pool.query(
+      `UPDATE tickets
+       SET category_id = $2, confidence = $3, updated_at = now()
+       WHERE id = $1`,
+      [ticket.id, categoryId, confidence]
+    );
+
+    return await findById(ticket.id);
+  } catch (err) {
+    console.error('AI classification failed:', err.message);
+    return ticket;
+  }
 }
 
 async function findById(id) {
   const { rows } = await pool.query(
-    'SELECT * FROM tickets WHERE id = $1',
+    `${TICKET_SELECT} WHERE t.id = $1`,
     [id]
   );
   return rows[0] || null;
@@ -33,14 +72,14 @@ async function findById(id) {
 
 async function findAll() {
   const { rows } = await pool.query(
-    'SELECT * FROM tickets ORDER BY created_at DESC'
+    `${TICKET_SELECT} ORDER BY t.created_at DESC`
   );
   return rows;
 }
 
 async function findAllByUser(userId) {
   const { rows } = await pool.query(
-    'SELECT * FROM tickets WHERE created_by = $1 ORDER BY created_at DESC',
+    `${TICKET_SELECT} WHERE t.created_by = $1 ORDER BY t.created_at DESC`,
     [userId]
   );
   return rows;
