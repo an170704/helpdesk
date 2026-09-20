@@ -1,4 +1,4 @@
-CATEGORIES = ("Network", "Hardware", "Software", "Account", "Printer")
+CATEGORIES = ("Network", "Hardware", "Software", "Account", "Printer", "Other")
 
 KEYWORDS = {
     "Network": [
@@ -24,7 +24,7 @@ KEYWORDS = {
     ],
 }
 
-DEFAULT_CATEGORY = "Software"
+DEFAULT_CATEGORY = "Other"
 
 
 def _count_matches(text: str, keywords: list[str]) -> int:

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Helpdesk API — Demo &amp; Test</title>
+<title>Helpdesk API</title>
 <style>
   :root {
     --bg: #f3f5f9;
@@ -100,6 +100,8 @@
 
   textarea { min-height: 64px; resize: vertical; }
 
+  .login-form input { flex: 1; min-width: 220px; margin-bottom: 0; }
+
   .hint { color: var(--muted); font-size: 12.5px; }
   .muted { color: var(--muted); }
   .mono { font-family: Consolas, monospace; }
@@ -194,8 +196,7 @@
 
 <header class="topbar">
   <div>
-    <h1>Helpdesk API — Demo &amp; Test</h1>
-    <p class="sub">Days 1–5: JWT Auth · Ticket CRUD · State machine · History · AI classification</p>
+    <h1>Helpdesk API</h1>
   </div>
   <div id="healthBadge" class="badge badge-gray">Checking API...</div>
 </header>
@@ -203,11 +204,12 @@
 <main>
   <section class="card">
     <h2>1. Login</h2>
-    <div class="row">
-      <button id="loginAdmin">Login as Admin</button>
-      <button id="loginUser" class="secondary">Login as User</button>
-      <button id="logout" class="ghost">Logout</button>
-    </div>
+    <form id="loginForm" class="row login-form">
+      <input id="loginEmail" type="text" placeholder="Email (e.g. admin@company.com)" required>
+      <input id="loginPassword" type="password" placeholder="Password" required>
+      <button type="submit">Login</button>
+      <button type="button" id="logout" class="ghost">Logout</button>
+    </form>
     <div id="sessionInfo" class="session muted">Not logged in. Seed accounts: admin@company.com / user@company.com (password 123456)</div>
   </section>
 
@@ -358,12 +360,13 @@ function renderSession() {
     `<span class="muted">${escapeHtml(current.user.email)}</span>`;
 }
 
-async function login(email) {
+async function login(email, password) {
   try {
-    const data = await api('POST', '/auth/login', { body: { email, password: '123456' } });
+    const data = await api('POST', '/auth/login', { body: { email, password } });
     current = { token: data.token, user: data.user };
     renderSession();
     toast(`Logged in: ${data.user.full_name} (${data.user.role})`);
+    $('#loginPassword').value = '';
     await loadTickets();
   } catch (err) {
     toast('Login failed: ' + err.message, 'error');
@@ -669,6 +672,15 @@ async function runTests() {
     res = await attempt(() => api('GET', '/tickets/abc', { token: userToken }));
     await add('TC21', 'View a ticket with malformed ID', '400',
       res.status === 400, `HTTP ${res.status}`);
+
+    res = await attempt(() => api('POST', '/tickets', {
+      token: userToken,
+      body: { subject: '[demo] I want to eat pho', description: 'random nonsense blah blah' },
+    }));
+    const offTopic = res.data ? res.data.ticket : null;
+    await add('TC22', 'Off-topic ticket is labeled Other', '201 - category Other',
+      res.status === 201 && offTopic && offTopic.category_name === 'Other',
+      offTopic ? `201 - category: ${offTopic.category_name}` : `HTTP ${res.status}`);
   } catch (err) {
     toast('Error while running tests: ' + err.message, 'error');
   }
@@ -704,8 +716,10 @@ async function checkHealth() {
   }
 }
 
-$('#loginAdmin').addEventListener('click', () => login('admin@company.com'));
-$('#loginUser').addEventListener('click', () => login('user@company.com'));
+$('#loginForm').addEventListener('submit', (event) => {
+  event.preventDefault();
+  login($('#loginEmail').value.trim(), $('#loginPassword').value);
+});
 $('#logout').addEventListener('click', logout);
 $('#createForm').addEventListener('submit', createTicket);
 $('#refreshBtn').addEventListener('click', loadTickets);
@@ -725,6 +739,7 @@ $('#ticketBody').addEventListener('click', (event) => {
 });
 
 checkHealth();
+$('#loginEmail').focus();
 </script>
 </body>
 </html>
