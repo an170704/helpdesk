@@ -24,14 +24,14 @@ app.use('/api/auth', authRoutes);
 app.use('/api/tickets', ticketRoutes);
 
 app.use((req, res) => {
-  res.status(404).json({ message: 'Không tìm thấy tài nguyên' });
+  res.status(404).json({ message: 'Resource not found' });
 });
 
 app.use((err, req, res, next) => {
   if (!err.status || err.status >= 500) {
     console.error(err);
   }
-  res.status(err.status || 500).json({ message: err.message || 'Lỗi máy chủ' });
+  res.status(err.status || 500).json({ message: err.message || 'Internal server error' });
 });
 
 module.exports = app;

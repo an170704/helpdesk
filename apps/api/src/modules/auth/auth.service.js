@@ -47,10 +47,10 @@ async function login(email, password) {
   const passwordOk = user && (await bcrypt.compare(password, user.password_hash));
 
   if (!passwordOk) {
-    throw new AppError(401, 'Email hoặc mật khẩu không đúng');
+    throw new AppError(401, 'Invalid email or password');
   }
   if (!user.is_active) {
-    throw new AppError(403, 'Tài khoản đã bị vô hiệu hóa');
+    throw new AppError(403, 'Account has been disabled');
   }
 
   return {
@@ -62,7 +62,7 @@ async function login(email, password) {
 async function getProfile(id) {
   const user = await findById(id);
   if (!user) {
-    throw new AppError(404, 'Không tìm thấy người dùng');
+    throw new AppError(404, 'User not found');
   }
   return toPublicUser(user);
 }

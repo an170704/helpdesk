@@ -1,6 +1,6 @@
 # Helpdesk
 
-Course: CT502H - Luận văn tốt nghiệp.
+Course: CT502H - Graduation Thesis.
 
 Semester 1, Academic year: 2026-2027.
 
@@ -10,4 +10,4 @@ Semester 1, Academic year: 2026-2027.
 
 ---
 
-Tên đề tài: XÂY DỰNG HỆ THỐNG QUẢN LÝ HỖ TRỢ KỸ THUẬT CNTT NỘI BỘ ỨNG DỤNG HỌC MÁY.
+Topic: BUILDING AN INTERNAL IT HELPDESK MANAGEMENT SYSTEM USING MACHINE LEARNING.

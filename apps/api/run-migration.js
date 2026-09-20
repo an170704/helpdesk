@@ -6,7 +6,7 @@ const pool = require('./src/config/db');
 async function run() {
   const file = process.argv[2];
   if (!file) {
-    throw new Error('Thieu duong dan file migration');
+    throw new Error('Missing migration file path');
   }
 
   const sql = fs.readFileSync(path.resolve(file), 'utf8');

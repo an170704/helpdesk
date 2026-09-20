@@ -5,7 +5,7 @@ const aiClient = require('../../services/aiClient');
 const categoryService = require('../categories/category.service');
 const { ALLOWED_TRANSITIONS } = require('./ticket.constants');
 
-// SELECT chung: join categories để lấy category_name hiển thị
+// Shared SELECT: joins categories to include category_name
 const TICKET_SELECT = `
   SELECT t.*, c.name AS category_name
   FROM tickets t
@@ -34,8 +34,8 @@ async function create({ subject, description, createdBy }) {
   return await classify(ticket);
 }
 
-// Gọi AI phân loại, lưu category_id + confidence vào ticket.
-// AI lỗi thì vẫn giữ ticket (category null), không chặn user tạo ticket.
+// Calls the AI service and stores category_id + confidence on the ticket.
+// If the AI service fails, the ticket is still returned (category stays null).
 async function classify(ticket) {
   try {
     const { category, confidence } = await aiClient.predictCategory({
@@ -94,14 +94,14 @@ async function updateStatus({ ticketId, actorId, status, note }) {
     const ticket = rows[0];
 
     if (!ticket) {
-      throw new AppError(404, 'Không tìm thấy ticket');
+      throw new AppError(404, 'Ticket not found');
     }
 
     const allowed = ALLOWED_TRANSITIONS[ticket.status] || [];
     if (!allowed.includes(status)) {
       throw new AppError(
         400,
-        `Không thể chuyển trạng thái từ "${ticket.status}" sang "${status}"`
+        `Cannot change status from "${ticket.status}" to "${status}"`
       );
     }
 

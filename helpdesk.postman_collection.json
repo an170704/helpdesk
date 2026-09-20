@@ -1,0 +1,326 @@
+{
+  "info": {
+    "name": "Helpdesk API",
+    "_postman_id": "b7f3c2a1-4d5e-4f6a-9b8c-0d1e2f3a4b5c",
+    "description": "Demo collection for the Helpdesk system (JWT Auth, Tickets, State machine, AI classification).\n\nHow to use:\n1. Start the API (npm run dev) and the AI service (uvicorn, port 8000).\n2. Run Login Admin or Login User - the token is saved to {{token}} automatically.\n3. All other requests reuse the token; nothing to copy.\n4. Creating a ticket saves {{ticketId}} for the Detail / History / Change status requests.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:3000" },
+    { "key": "aiUrl", "value": "http://localhost:8000" },
+    { "key": "token", "value": "" },
+    { "key": "ticketId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "0. Health check",
+      "item": [
+        {
+          "name": "API + Database",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/health",
+              "host": ["{{baseUrl}}"],
+              "path": ["health"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('API + DB OK', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().db).to.eql('ok');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "AI service",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{aiUrl}}/health",
+              "host": ["{{aiUrl}}"],
+              "path": ["health"]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "1. Auth",
+      "item": [
+        {
+          "name": "Login Admin",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"admin@company.com\",\n  \"password\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Admin login returns 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "if (data.token) {",
+                  "  pm.collectionVariables.set('token', data.token);",
+                  "  console.log('Saved token for ' + data.user.full_name + ' (' + data.user.role + ')');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login User",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"user@company.com\",\n  \"password\": \"123456\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "login"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('User login returns 200', () => pm.response.to.have.status(200));",
+                  "const data = pm.response.json();",
+                  "if (data.token) {",
+                  "  pm.collectionVariables.set('token', data.token);",
+                  "  console.log('Saved token for ' + data.user.full_name + ' (' + data.user.role + ')');",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Current user (/me)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "auth", "me"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Profile returns 200', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Tickets",
+      "item": [
+        {
+          "name": "Create ticket (User) - AI classified",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"internet not working\",\n  \"description\": \"cannot connect wifi in office\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tickets"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Ticket created (201)', () => pm.response.to.have.status(201));",
+                  "const data = pm.response.json();",
+                  "if (data.ticket) {",
+                  "  pm.collectionVariables.set('ticketId', data.ticket.id);",
+                  "  console.log('Saved ticketId = ' + data.ticket.id + ' | AI category: ' + (data.ticket.category_name || 'not classified'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Ticket list",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tickets"]
+            }
+          }
+        },
+        {
+          "name": "Ticket detail",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tickets", "{{ticketId}}"]
+            }
+          }
+        },
+        {
+          "name": "Ticket history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/history",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tickets", "{{ticketId}}", "history"]
+            }
+          }
+        },
+        {
+          "name": "Change status (Admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"in_progress\",\n  \"note\": \"Working on it\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/tickets/{{ticketId}}/status",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "tickets", "{{ticketId}}", "status"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status changed (200)', () => pm.response.to.have.status(200));",
+                  "console.log('Valid flow: pending -> in_progress -> resolved -> closed (edit \"status\" in the body for the next step)');"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. AI service",
+      "item": [
+        {
+          "name": "Predict category",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"subject\": \"printer paper jam\",\n  \"description\": \"cannot print, error light is on\"\n}",
+              "options": { "raw": { "language": "json" } }
+            },
+            "url": {
+              "raw": "{{aiUrl}}/predict",
+              "host": ["{{aiUrl}}"],
+              "path": ["predict"]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('AI returns category + confidence', () => {",
+                  "  pm.response.to.have.status(200);",
+                  "  pm.expect(pm.response.json().category).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

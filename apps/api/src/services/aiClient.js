@@ -10,7 +10,7 @@ async function predictCategory({ subject, description }) {
   });
 
   if (!res.ok) {
-    throw new Error(`AI service trả về lỗi ${res.status}`);
+    throw new Error(`AI service returned error ${res.status}`);
   }
 
   return res.json();

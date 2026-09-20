@@ -1,10 +1,10 @@
 -- ============================================
--- Migration 001: BIGINT -> INT (giữ nguyên dữ liệu)
+-- Migration 001: BIGINT -> INT (keeps existing data)
 -- ============================================
 
 BEGIN;
 
--- 1. Bỏ khóa ngoại trước khi đổi kiểu cột
+-- 1. Drop foreign keys before altering column types
 ALTER TABLE tickets         DROP CONSTRAINT tickets_category_id_fkey;
 ALTER TABLE tickets         DROP CONSTRAINT tickets_created_by_fkey;
 ALTER TABLE ticket_comments DROP CONSTRAINT ticket_comments_ticket_id_fkey;
@@ -14,7 +14,7 @@ ALTER TABLE ticket_history  DROP CONSTRAINT ticket_history_actor_id_fkey;
 ALTER TABLE kb_articles     DROP CONSTRAINT kb_articles_category_id_fkey;
 ALTER TABLE kb_articles     DROP CONSTRAINT kb_articles_author_id_fkey;
 
--- 2. Đổi kiểu dữ liệu
+-- 2. Alter column types
 ALTER TABLE users            ALTER COLUMN id TYPE integer;
 ALTER TABLE categories       ALTER COLUMN id TYPE integer;
 ALTER TABLE tickets          ALTER COLUMN id TYPE integer,
@@ -30,7 +30,7 @@ ALTER TABLE kb_articles      ALTER COLUMN id TYPE integer,
                              ALTER COLUMN category_id TYPE integer,
                              ALTER COLUMN author_id TYPE integer;
 
--- 3. Sequence về kiểu int
+-- 3. Convert sequences to int
 ALTER SEQUENCE users_id_seq            AS integer;
 ALTER SEQUENCE categories_id_seq       AS integer;
 ALTER SEQUENCE tickets_id_seq          AS integer;
@@ -38,7 +38,7 @@ ALTER SEQUENCE ticket_comments_id_seq  AS integer;
 ALTER SEQUENCE ticket_history_id_seq   AS integer;
 ALTER SEQUENCE kb_articles_id_seq      AS integer;
 
--- 4. Tạo lại khóa ngoại
+-- 4. Recreate foreign keys
 ALTER TABLE tickets         ADD CONSTRAINT tickets_category_id_fkey
   FOREIGN KEY (category_id) REFERENCES categories(id);
 ALTER TABLE tickets         ADD CONSTRAINT tickets_created_by_fkey

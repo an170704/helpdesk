@@ -2,26 +2,25 @@ CATEGORIES = ("Network", "Hardware", "Software", "Account", "Printer")
 
 KEYWORDS = {
     "Network": [
-        "mạng", "mang", "network", "wifi", "wi-fi", "internet", "kết nối", "ket noi",
-        "lan", "vpn", "mất mạng", "mat mang", "router", "switch", "không vào được web",
+        "connect", "connection", "internet", "lan", "network", "offline",
+        "router", "switch", "vpn", "wi-fi", "wifi",
     ],
     "Hardware": [
-        "máy tính", "may tinh", "hardware", "màn hình", "man hinh", "bàn phím", "ban phim",
-        "chuột", "chuot", "ram", "cpu", "ổ cứng", "o cung", "pin", "nguồn", "nguon",
-        "laptop", "khởi động", "khoi dong", "hỏng", "hong", "cháy", "chay", "treo máy", "treo may",
+        "battery", "boot", "broken", "computer", "cpu", "dead", "device", "disk",
+        "hard drive", "hardware", "keyboard", "laptop", "monitor", "mouse",
+        "power", "ram", "screen", "startup",
     ],
     "Software": [
-        "phần mềm", "phan mem", "software", "ứng dụng", "ung dung", "hệ điều hành", "he dieu hanh",
-        "windows", "excel", "word", "outlook", "cài đặt", "cai dat", "update", "crash",
-        "lỗi phần mềm", "loi phan mem", "browser", "trình duyệt", "trinh duyet",
+        "app", "application", "browser", "bug", "crash", "error", "excel", "freeze",
+        "install", "operating system", "outlook", "software", "update", "windows", "word",
     ],
     "Account": [
-        "tài khoản", "tai khoan", "account", "mật khẩu", "mat khau", "password",
-        "login", "đăng nhập", "dang nhap", "quyền", "quyen", "email", "khóa tài khoản", "khoa tai khoan",
+        "access", "account", "credentials", "email", "forgot", "locked",
+        "login", "password", "permission", "reset", "sign in", "username",
     ],
     "Printer": [
-        "máy in", "may in", "printer", "scan", "in ấn", "in an", "giấy", "giay",
-        "mực", "muc", "kẹt giấy", "ket giay", "toner", "photocopy",
+        "cartridge", "ink", "jam", "paper", "photocopy", "print", "printer",
+        "printing", "scan", "scanner", "toner",
     ],
 }
 

@@ -4,7 +4,7 @@ const { TICKET_STATUSES } = require('./ticket.constants');
 
 function validateId(id) {
   if (!/^\d+$/.test(id)) {
-    throw new AppError(400, 'ID không hợp lệ');
+    throw new AppError(400, 'Invalid ID');
   }
 }
 
@@ -13,14 +13,14 @@ function assertCanView(ticket, user) {
   const isAdmin = user.role === 'admin';
 
   if (!isOwner && !isAdmin) {
-    throw new AppError(403, 'Bạn không có quyền xem ticket này');
+    throw new AppError(403, 'You do not have permission to view this ticket');
   }
 }
 
 async function findTicketOrFail(id) {
   const ticket = await ticketService.findById(id);
   if (!ticket) {
-    throw new AppError(404, 'Không tìm thấy ticket');
+    throw new AppError(404, 'Ticket not found');
   }
   return ticket;
 }
@@ -30,10 +30,10 @@ async function createTicket(req, res) {
   const description = (req.body.description || '').trim();
 
   if (!subject || !description) {
-    throw new AppError(400, 'subject và description là bắt buộc');
+    throw new AppError(400, 'subject and description are required');
   }
   if (subject.length > 255) {
-    throw new AppError(400, 'subject không được vượt quá 255 ký tự');
+    throw new AppError(400, 'subject must not exceed 255 characters');
   }
 
   const ticket = await ticketService.create({
@@ -70,7 +70,7 @@ async function updateStatus(req, res) {
 
   const { status, note } = req.body;
   if (!TICKET_STATUSES.includes(status)) {
-    throw new AppError(400, 'Trạng thái không hợp lệ');
+    throw new AppError(400, 'Invalid status');
   }
 
   const ticket = await ticketService.updateStatus({

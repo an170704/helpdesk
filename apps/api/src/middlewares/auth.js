@@ -6,7 +6,7 @@ function authenticate(req, res, next) {
   const [scheme, token] = header.split(' ');
 
   if (scheme !== 'Bearer' || !token) {
-    throw new AppError(401, 'Vui lòng đăng nhập');
+    throw new AppError(401, 'Please log in');
   }
 
   try {
@@ -14,14 +14,14 @@ function authenticate(req, res, next) {
     req.user = { id: payload.id, email: payload.email, role: payload.role };
     next();
   } catch {
-    throw new AppError(401, 'Token không hợp lệ hoặc đã hết hạn');
+    throw new AppError(401, 'Invalid or expired token');
   }
 }
 
 function requireRole(...roles) {
   return (req, res, next) => {
     if (!req.user || !roles.includes(req.user.role)) {
-      throw new AppError(403, 'Bạn không có quyền thực hiện hành động này');
+      throw new AppError(403, 'You do not have permission to perform this action');
     }
     next();
   };

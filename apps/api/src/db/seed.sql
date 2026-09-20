@@ -1,20 +1,20 @@
 -- ============================================
--- Helpdesk - Seed data (chạy 1 lần)
+-- Helpdesk - Seed data (run once)
 -- ============================================
 
--- Bật tiện ích băm mật khẩu bcrypt
+-- Enable bcrypt password hashing
 CREATE EXTENSION IF NOT EXISTS pgcrypto;
 
--- 5 nhóm sự cố (= nhãn SVM)
+-- 5 categories (= SVM labels)
 INSERT INTO categories (name, description) VALUES
-  ('Network',  'Sự cố mạng, Wi-Fi, kết nối nội bộ'),
-  ('Hardware', 'Hỏng hóc phần cứng, máy tính, thiết bị'),
-  ('Software', 'Lỗi phần mềm, ứng dụng, hệ điều hành'),
-  ('Account',  'Vấn đề tài khoản, mật khẩu, phân quyền'),
-  ('Printer',  'Lỗi máy in, scan, thiết bị văn phòng')
+  ('Network',  'Network issues, Wi-Fi, internal connectivity'),
+  ('Hardware', 'Hardware failures, computers, devices'),
+  ('Software', 'Software bugs, applications, operating systems'),
+  ('Account',  'Account issues, passwords, permissions'),
+  ('Printer',  'Printer, scanner, office equipment issues')
 ON CONFLICT (name) DO NOTHING;
 
--- 2 tài khoản mẫu (mật khẩu: 123456)
+-- 2 sample accounts (password: 123456)
 INSERT INTO users (email, password_hash, full_name, role) VALUES
   ('admin@company.com', crypt('123456', gen_salt('bf')), 'Admin IT',        'admin'),
   ('user@company.com',  crypt('123456', gen_salt('bf')), 'Nguyen Van A',    'user')

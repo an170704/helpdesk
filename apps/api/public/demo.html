@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="vi">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -195,30 +195,30 @@
 <header class="topbar">
   <div>
     <h1>Helpdesk API — Demo &amp; Test</h1>
-    <p class="sub">Ngày 1–5: Auth JWT · Ticket CRUD · State machine · History · AI phân loại sự cố</p>
+    <p class="sub">Days 1–5: JWT Auth · Ticket CRUD · State machine · History · AI classification</p>
   </div>
-  <div id="healthBadge" class="badge badge-gray">Đang kiểm tra API...</div>
+  <div id="healthBadge" class="badge badge-gray">Checking API...</div>
 </header>
 
 <main>
   <section class="card">
-    <h2>1. Đăng nhập</h2>
+    <h2>1. Login</h2>
     <div class="row">
-      <button id="loginAdmin">Đăng nhập Admin</button>
-      <button id="loginUser" class="secondary">Đăng nhập User</button>
-      <button id="logout" class="ghost">Đăng xuất</button>
+      <button id="loginAdmin">Login as Admin</button>
+      <button id="loginUser" class="secondary">Login as User</button>
+      <button id="logout" class="ghost">Logout</button>
     </div>
-    <div id="sessionInfo" class="session muted">Chưa đăng nhập. Tài khoản seed: admin@company.com / user@company.com (mật khẩu 123456)</div>
+    <div id="sessionInfo" class="session muted">Not logged in. Seed accounts: admin@company.com / user@company.com (password 123456)</div>
   </section>
 
   <section class="card">
-    <h2>2. Tạo ticket</h2>
+    <h2>2. Create ticket</h2>
     <form id="createForm">
-      <input id="subject" placeholder="Tiêu đề (subject)" required>
-      <textarea id="description" placeholder="Mô tả sự cố (description)" required></textarea>
+      <input id="subject" placeholder="Subject" required>
+      <textarea id="description" placeholder="Description" required></textarea>
       <div class="row">
-        <button type="submit">Tạo ticket</button>
-        <span class="hint">Ví dụ: "internet not working" + "cannot connect wifi" để AI gán nhãn Network</span>
+        <button type="submit">Create ticket</button>
+        <span class="hint">Example: "internet not working" + "cannot connect wifi" so AI labels it Network</span>
       </div>
     </form>
     <div id="createResult"></div>
@@ -226,19 +226,19 @@
 
   <section class="card">
     <div class="row space-between">
-      <h2>3. Danh sách ticket</h2>
-      <button id="refreshBtn" class="ghost">Làm mới</button>
+      <h2>3. Ticket list</h2>
+      <button id="refreshBtn" class="ghost">Refresh</button>
     </div>
     <div class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>ID</th><th>Tiêu đề</th><th>Trạng thái</th><th>Ưu tiên</th>
-            <th>Nhóm (AI)</th><th>Tin cậy</th><th>Người tạo</th><th></th>
+            <th>ID</th><th>Subject</th><th>Status</th><th>Priority</th>
+            <th>Category (AI)</th><th>Confidence</th><th>Created by</th><th></th>
           </tr>
         </thead>
         <tbody id="ticketBody">
-          <tr><td colspan="8" class="muted">Chưa đăng nhập</td></tr>
+          <tr><td colspan="8" class="muted">Not logged in</td></tr>
         </tbody>
       </table>
     </div>
@@ -247,19 +247,19 @@
   <section class="card">
     <div class="row space-between">
       <div>
-        <h2>4. Bộ test case tự động</h2>
+        <h2>4. Automated test cases</h2>
         <p class="hint">
-          Cần API chạy ở cổng 3000. Riêng case AI (TC09) cần AI service ở cổng 8000, nếu không sẽ báo SKIP.
-          Ticket test có tiền tố [demo] nên cứ chạy lại thoải mái.
+          Requires the API on port 3000. The AI case (TC09) needs the AI service on port 8000,
+          otherwise it reports SKIP. Test tickets are prefixed with [demo], so it is safe to rerun.
         </p>
       </div>
-      <button id="runTestsBtn">Chạy test case</button>
+      <button id="runTestsBtn">Run test cases</button>
     </div>
     <div id="testSummary" class="summary"></div>
     <div class="table-wrap">
       <table>
         <thead>
-          <tr><th>Mã</th><th>Test case</th><th>Kỳ vọng</th><th>Thực tế</th><th>Kết quả</th></tr>
+          <tr><th>Code</th><th>Test case</th><th>Expected</th><th>Actual</th><th>Result</th></tr>
         </thead>
         <tbody id="testBody"></tbody>
       </table>
@@ -268,8 +268,8 @@
 
   <section class="card">
     <div class="row space-between">
-      <h2>Nhật ký API</h2>
-      <button id="clearLog" class="ghost">Xóa nhật ký</button>
+      <h2>API log</h2>
+      <button id="clearLog" class="ghost">Clear log</button>
     </div>
     <div id="log" class="log"></div>
   </section>
@@ -286,8 +286,8 @@ let current = null;
 const $ = (sel) => document.querySelector(sel);
 
 const NEXT_STATUS = { pending: 'in_progress', in_progress: 'resolved', resolved: 'closed' };
-const NEXT_LABEL = { pending: 'Bắt đầu xử lý', in_progress: 'Đã xử lý', resolved: 'Đóng ticket' };
-const STATUS_LABEL = { pending: 'Chờ xử lý', in_progress: 'Đang xử lý', resolved: 'Đã xử lý', closed: 'Đã đóng' };
+const NEXT_LABEL = { pending: 'Start processing', in_progress: 'Mark resolved', resolved: 'Close ticket' };
+const STATUS_LABEL = { pending: 'Pending', in_progress: 'In progress', resolved: 'Resolved', closed: 'Closed' };
 const STATUS_BADGE = { pending: 'badge-gray', in_progress: 'badge-blue', resolved: 'badge-green', closed: 'badge-dark' };
 
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -330,7 +330,7 @@ async function api(method, path, { token, body } = {}) {
   logLine(method, path, res.status);
 
   let data = null;
-  try { data = await res.json(); } catch { /* body rỗng */ }
+  try { data = await res.json(); } catch { /* empty body */ }
 
   if (!res.ok) {
     const err = new Error(data && data.message ? data.message : `HTTP ${res.status}`);
@@ -346,14 +346,14 @@ function renderSession() {
   const box = $('#sessionInfo');
 
   if (!current) {
-    box.innerHTML = 'Chưa đăng nhập. Tài khoản seed: admin@company.com / user@company.com (mật khẩu 123456)';
+    box.innerHTML = 'Not logged in. Seed accounts: admin@company.com / user@company.com (password 123456)';
     box.classList.add('muted');
     return;
   }
 
   box.classList.remove('muted');
   box.innerHTML =
-    `Đang đăng nhập: <b>${escapeHtml(current.user.full_name)}</b> ` +
+    `Logged in as <b>${escapeHtml(current.user.full_name)}</b> ` +
     `<span class="badge ${current.user.role === 'admin' ? 'badge-dark' : 'badge-blue'}">${current.user.role}</span> ` +
     `<span class="muted">${escapeHtml(current.user.email)}</span>`;
 }
@@ -363,17 +363,17 @@ async function login(email) {
     const data = await api('POST', '/auth/login', { body: { email, password: '123456' } });
     current = { token: data.token, user: data.user };
     renderSession();
-    toast(`Đăng nhập thành công: ${data.user.full_name} (${data.user.role})`);
+    toast(`Logged in: ${data.user.full_name} (${data.user.role})`);
     await loadTickets();
   } catch (err) {
-    toast('Đăng nhập thất bại: ' + err.message, 'error');
+    toast('Login failed: ' + err.message, 'error');
   }
 }
 
 function logout() {
   current = null;
   renderSession();
-  $('#ticketBody').innerHTML = '<tr><td colspan="8" class="muted">Chưa đăng nhập</td></tr>';
+  $('#ticketBody').innerHTML = '<tr><td colspan="8" class="muted">Not logged in</td></tr>';
 }
 
 async function loadTickets() {
@@ -383,7 +383,7 @@ async function loadTickets() {
     const { tickets } = await api('GET', '/tickets', { token: current.token });
     renderTickets(tickets);
   } catch (err) {
-    toast('Không tải được danh sách: ' + err.message, 'error');
+    toast('Could not load tickets: ' + err.message, 'error');
   }
 }
 
@@ -391,7 +391,7 @@ function renderTickets(tickets) {
   const body = $('#ticketBody');
 
   if (!tickets.length) {
-    body.innerHTML = '<tr><td colspan="8" class="muted">Chưa có ticket nào</td></tr>';
+    body.innerHTML = '<tr><td colspan="8" class="muted">No tickets yet</td></tr>';
     return;
   }
 
@@ -410,12 +410,12 @@ function renderTickets(tickets) {
       <td>${escapeHtml(t.subject)}</td>
       <td><span class="badge ${STATUS_BADGE[t.status]}">${STATUS_LABEL[t.status]}</span></td>
       <td>${escapeHtml(t.priority)}</td>
-      <td>${t.category_name ? `<span class="badge badge-amber">${escapeHtml(t.category_name)}</span>` : '<span class="muted">chưa có</span>'}</td>
+      <td>${t.category_name ? `<span class="badge badge-amber">${escapeHtml(t.category_name)}</span>` : '<span class="muted">none</span>'}</td>
       <td class="mono">${t.confidence ?? '-'}</td>
       <td class="mono">${t.created_by}</td>
       <td class="row" style="gap:6px">
         ${actionButton}
-        <button class="small ghost" data-action="history" data-id="${t.id}">Lịch sử</button>
+        <button class="small ghost" data-action="history" data-id="${t.id}">History</button>
       </td>`;
 
     body.appendChild(row);
@@ -426,12 +426,12 @@ async function advanceStatus(id, status) {
   try {
     await api('PATCH', `/tickets/${id}/status`, {
       token: current.token,
-      body: { status, note: 'Thao tác từ trang demo' },
+      body: { status, note: 'Action from demo page' },
     });
-    toast(`Ticket #${id} chuyển sang "${STATUS_LABEL[status]}"`);
+    toast(`Ticket #${id} moved to "${STATUS_LABEL[status]}"`);
     await loadTickets();
   } catch (err) {
-    toast(`Không chuyển được trạng thái: ${err.message}`, 'error');
+    toast(`Could not change status: ${err.message}`, 'error');
   }
 }
 
@@ -455,7 +455,7 @@ async function toggleHistory(id, button) {
     for (const h of history) {
       const line = document.createElement('div');
       if (h.action === 'created') {
-        line.innerHTML = `<span class="muted mono">${h.created_at}</span> — <b>${escapeHtml(h.actor_name)}</b> tạo ticket → <b>${h.to_status}</b>`;
+        line.innerHTML = `<span class="muted mono">${h.created_at}</span> — <b>${escapeHtml(h.actor_name)}</b> created ticket → <b>${h.to_status}</b>`;
       } else {
         line.innerHTML = `<span class="muted mono">${h.created_at}</span> — <b>${escapeHtml(h.actor_name)}</b>: ${h.from_status} → <b>${h.to_status}</b>${h.note ? ` — "${escapeHtml(h.note)}"` : ''}`;
       }
@@ -464,7 +464,7 @@ async function toggleHistory(id, button) {
 
     row.after(detail);
   } catch (err) {
-    toast('Không tải được lịch sử: ' + err.message, 'error');
+    toast('Could not load history: ' + err.message, 'error');
   }
 }
 
@@ -472,7 +472,7 @@ async function createTicket(event) {
   event.preventDefault();
 
   if (!current) {
-    toast('Đăng nhập trước đã', 'error');
+    toast('Log in first', 'error');
     return;
   }
 
@@ -486,16 +486,16 @@ async function createTicket(event) {
     });
 
     const category = ticket.category_name
-      ? `<span class="badge badge-amber">${escapeHtml(ticket.category_name)}</span> (độ tin cậy ${ticket.confidence})`
-      : '<span class="muted">AI chưa phân loại (service chưa chạy?)</span>';
+      ? `<span class="badge badge-amber">${escapeHtml(ticket.category_name)}</span> (confidence ${ticket.confidence})`
+      : '<span class="muted">AI not classified (service not running?)</span>';
 
     $('#createResult').innerHTML =
-      `Đã tạo ticket <b class="mono">#${ticket.id}</b> — trạng thái <b>${STATUS_LABEL[ticket.status]}</b> — nhóm: ${category}`;
+      `Created ticket <b class="mono">#${ticket.id}</b> — status <b>${STATUS_LABEL[ticket.status]}</b> — category: ${category}`;
 
     $('#createForm').reset();
     await loadTickets();
   } catch (err) {
-    toast('Tạo ticket thất bại: ' + err.message, 'error');
+    toast('Could not create ticket: ' + err.message, 'error');
   }
 }
 
@@ -528,7 +528,7 @@ function renderTestResult(r) {
 async function runTests() {
   const button = $('#runTestsBtn');
   button.disabled = true;
-  button.textContent = 'Đang chạy...';
+  button.textContent = 'Running...';
   $('#testBody').innerHTML = '';
   $('#testSummary').textContent = '';
 
@@ -548,34 +548,33 @@ async function runTests() {
   try {
     let res = await attempt(() => login('admin@company.com', '123456'));
     const adminToken = res.data ? res.data.token : null;
-    const adminId = res.data ? res.data.user.id : null;
-    await add('TC01', 'Đăng nhập admin đúng mật khẩu', '200 + có token',
+    await add('TC01', 'Admin logs in with correct password', '200 + token returned',
       res.status === 200 && !!adminToken,
-      res.data ? `200 — ${res.data.user.full_name}` : `HTTP ${res.status}`);
+      res.data ? `200 - ${res.data.user.full_name}` : `HTTP ${res.status}`);
 
-    res = await attempt(() => login('admin@company.com', 'sai-mat-khau'));
-    await add('TC02', 'Đăng nhập sai mật khẩu', '401',
+    res = await attempt(() => login('admin@company.com', 'wrong-password'));
+    await add('TC02', 'Login with wrong password', '401',
       res.status === 401, `HTTP ${res.status}`);
 
     res = await attempt(() => login('admin@company.com', null));
-    await add('TC03', 'Đăng nhập thiếu mật khẩu', '400',
+    await add('TC03', 'Login with missing password', '400',
       res.status === 400, `HTTP ${res.status}`);
 
     res = await attempt(() => login('user@company.com', '123456'));
     const userToken = res.data ? res.data.token : null;
     const userId = res.data ? res.data.user.id : null;
-    await add('TC04', 'Đăng nhập user đúng mật khẩu', '200 + có token',
+    await add('TC04', 'User logs in with correct password', '200 + token returned',
       res.status === 200 && !!userToken,
-      res.data ? `200 — ${res.data.user.full_name}` : `HTTP ${res.status}`);
+      res.data ? `200 - ${res.data.user.full_name}` : `HTTP ${res.status}`);
 
     res = await attempt(() => api('GET', '/auth/me'));
-    await add('TC05', 'Gọi /auth/me không có token', '401',
+    await add('TC05', 'GET /auth/me without token', '401',
       res.status === 401, `HTTP ${res.status}`);
 
     res = await attempt(() => api('GET', '/auth/me', { token: userToken }));
-    await add('TC06', 'Gọi /auth/me bằng token user', '200 — trả về đúng user',
+    await add('TC06', 'GET /auth/me with user token', '200 - returns the right user',
       res.status === 200 && res.data && res.data.user.id === userId,
-      res.data ? `200 — ${res.data.user.email}` : `HTTP ${res.status}`);
+      res.data ? `200 - ${res.data.user.email}` : `HTTP ${res.status}`);
 
     res = await attempt(() => api('POST', '/tickets', {
       token: userToken,
@@ -583,97 +582,95 @@ async function runTests() {
     }));
     const ticket = res.data ? res.data.ticket : null;
     const ticketId = ticket ? ticket.id : null;
-    await add('TC07', 'User tạo ticket', '201 — status pending, created_by = user',
+    await add('TC07', 'User creates a ticket', '201 - status pending, created_by = user',
       res.status === 201 && ticket && ticket.status === 'pending' && ticket.created_by === userId,
-      ticket ? `201 — #${ticket.id}, ${ticket.status}, created_by=${ticket.created_by}` : `HTTP ${res.status}`);
+      ticket ? `201 - #${ticket.id}, ${ticket.status}, created_by=${ticket.created_by}` : `HTTP ${res.status}`);
 
     res = await attempt(() => api('POST', '/tickets', {
-      token: userToken, body: { subject: '[demo] thieu mo ta' },
+      token: userToken, body: { subject: '[demo] missing description' },
     }));
-    await add('TC08', 'Tạo ticket thiếu description', '400',
-      res.status === 400, `HTTP ${res.status} — ${res.message}`);
+    await add('TC08', 'Create ticket without description', '400',
+      res.status === 400, `HTTP ${res.status} - ${res.message}`);
 
     if (ticket && !ticket.category_name) {
-      await add('TC09', 'AI phân loại ticket mạng', 'Network + confidence > 0',
-        false, 'Ticket chưa có nhãn — AI service (cổng 8000) chưa chạy?', true);
+      await add('TC09', 'AI classifies network ticket', 'Network + confidence > 0',
+        false, 'Ticket has no category - AI service (port 8000) not running?', true);
     } else {
-      await add('TC09', 'AI phân loại ticket mạng', 'Network + confidence > 0',
+      await add('TC09', 'AI classifies network ticket', 'Network + confidence > 0',
         ticket && ticket.category_name === 'Network' && ticket.confidence > 0,
-        ticket ? `Nhãn: ${ticket.category_name}, tin cậy: ${ticket.confidence}` : 'không tạo được ticket');
+        ticket ? `Category: ${ticket.category_name}, confidence: ${ticket.confidence}` : 'ticket was not created');
     }
 
     res = await attempt(() => api('GET', '/tickets', { token: userToken }));
     const userList = res.data ? res.data.tickets : [];
     const onlyOwn = userList.length > 0 && userList.every((t) => t.created_by === userId);
-    await add('TC10', 'User chỉ thấy ticket của mình', `${userList.length} ticket, tất cả created_by = user`,
+    await add('TC10', 'User only sees own tickets', `${userList.length} tickets, all created_by = user`,
       res.status === 200 && onlyOwn,
-      `${userList.length} ticket, tất cả của mình: ${onlyOwn}`);
+      `${userList.length} tickets, all owned: ${onlyOwn}`);
 
     res = await attempt(() => api('POST', '/tickets', {
       token: adminToken,
-      body: { subject: '[demo] ticket cua admin', description: 'admin tao de test phan quyen' },
+      body: { subject: '[demo] admin ticket', description: 'created by admin to test permissions' },
     }));
     const adminTicket = res.data ? res.data.ticket : null;
-    await add('TC11', 'Admin tạo ticket', '201',
+    await add('TC11', 'Admin creates a ticket', '201',
       res.status === 201 && !!adminTicket,
-      adminTicket ? `201 — #${adminTicket.id}` : `HTTP ${res.status}`);
+      adminTicket ? `201 - #${adminTicket.id}` : `HTTP ${res.status}`);
 
     res = await attempt(() => api('GET', `/tickets/${adminTicket ? adminTicket.id : 0}`, { token: userToken }));
-    await add('TC12', 'User xem ticket của admin', '403',
+    await add('TC12', 'User views an admin ticket', '403',
       res.status === 403, `HTTP ${res.status}`);
 
     res = await attempt(() => api('GET', '/tickets', { token: adminToken }));
     const adminList = res.data ? res.data.tickets : [];
-    await add('TC13', 'Admin thấy tất cả ticket', `>= ${userList.length} ticket`,
+    await add('TC13', 'Admin sees all tickets', `>= ${userList.length} tickets`,
       res.status === 200 && adminList.length >= userList.length,
-      `${adminList.length} ticket (user thấy ${userList.length})`);
+      `${adminList.length} tickets (user sees ${userList.length})`);
 
     res = await attempt(() => patchStatus(ticketId, adminToken, 'in_progress'));
-    await add('TC14', 'Admin chuyển pending → in_progress', '200 — status in_progress',
+    await add('TC14', 'Admin moves pending to in_progress', '200 - status in_progress',
       res.status === 200 && res.data && res.data.ticket.status === 'in_progress',
-      res.data ? `200 — ${res.data.ticket.status}` : `HTTP ${res.status} — ${res.message}`);
+      res.data ? `200 - ${res.data.ticket.status}` : `HTTP ${res.status} - ${res.message}`);
 
     res = await attempt(() => patchStatus(ticketId, adminToken, 'resolved'));
-    await add('TC15', 'Admin chuyển in_progress → resolved', '200 + có resolved_at',
+    await add('TC15', 'Admin moves in_progress to resolved', '200 + resolved_at set',
       res.status === 200 && res.data && res.data.ticket.resolved_at,
-      res.data ? `200 — resolved_at: ${res.data.ticket.resolved_at ? 'có' : 'không'}` : `HTTP ${res.status}`);
+      res.data ? `200 - resolved_at: ${res.data.ticket.resolved_at ? 'set' : 'missing'}` : `HTTP ${res.status}`);
 
     res = await attempt(() => patchStatus(ticketId, adminToken, 'closed'));
-    await add('TC16', 'Admin chuyển resolved → closed', '200 + có closed_at',
+    await add('TC16', 'Admin moves resolved to closed', '200 + closed_at set',
       res.status === 200 && res.data && res.data.ticket.closed_at,
-      res.data ? `200 — closed_at: ${res.data.ticket.closed_at ? 'có' : 'không'}` : `HTTP ${res.status}`);
+      res.data ? `200 - closed_at: ${res.data.ticket.closed_at ? 'set' : 'missing'}` : `HTTP ${res.status}`);
 
     res = await attempt(() => api('POST', '/tickets', {
       token: userToken,
-      body: { subject: '[demo] test nhay coc', description: 'chuyen pending sang closed luon' },
+      body: { subject: '[demo] skip transition', description: 'try pending to closed directly' },
     }));
     const jumpTicket = res.data ? res.data.ticket : null;
     res = await attempt(() => patchStatus(jumpTicket ? jumpTicket.id : 0, adminToken, 'closed'));
-    await add('TC17', 'Chuyển nhảy cóc pending → closed', '400 — chặn chuyển sai luật',
-      res.status === 400, `HTTP ${res.status} — ${res.message}`);
+    await add('TC17', 'Skip transition pending to closed', '400 - invalid transition blocked',
+      res.status === 400, `HTTP ${res.status} - ${res.message}`);
 
     res = await attempt(() => patchStatus(jumpTicket ? jumpTicket.id : 0, userToken, 'in_progress'));
-    await add('TC18', 'User tự đổi trạng thái ticket', '403 — chỉ admin được đổi',
+    await add('TC18', 'User changes a ticket status', '403 - admin only',
       res.status === 403, `HTTP ${res.status}`);
 
     res = await attempt(() => api('GET', `/tickets/${ticketId}/history`, { token: userToken }));
     const history = res.data ? res.data.history : [];
     const last = history[history.length - 1];
-    await add('TC19', 'Lịch sử ticket đủ 4 bước', '4 dòng — bước cuối closed',
+    await add('TC19', 'Ticket history has all 4 entries', '4 entries - last one closed',
       res.status === 200 && history.length === 4 && last && last.to_status === 'closed',
-      `${history.length} dòng, bước cuối: ${last ? last.to_status : 'không có'}`);
+      `${history.length} entries, last: ${last ? last.to_status : 'none'}`);
 
     res = await attempt(() => api('GET', '/tickets/999999', { token: userToken }));
-    await add('TC20', 'Xem ticket không tồn tại', '404',
+    await add('TC20', 'View a non-existent ticket', '404',
       res.status === 404, `HTTP ${res.status}`);
 
     res = await attempt(() => api('GET', '/tickets/abc', { token: userToken }));
-    await add('TC21', 'Xem ticket với ID sai định dạng', '400',
+    await add('TC21', 'View a ticket with malformed ID', '400',
       res.status === 400, `HTTP ${res.status}`);
-
-    void adminId;
   } catch (err) {
-    toast('Lỗi khi chạy test: ' + err.message, 'error');
+    toast('Error while running tests: ' + err.message, 'error');
   }
 
   const passed = results.filter((r) => r.pass).length;
@@ -687,7 +684,7 @@ async function runTests() {
     (skipped ? ` — <span style="color:var(--amber)">${skipped} SKIP</span>` : '');
 
   button.disabled = false;
-  button.textContent = 'Chạy lại test case';
+  button.textContent = 'Run test cases again';
 }
 
 async function checkHealth() {
@@ -700,10 +697,10 @@ async function checkHealth() {
       badge.textContent = 'API + Database: OK';
       return;
     }
-    throw new Error('health check thất bại');
+    throw new Error('health check failed');
   } catch {
     badge.className = 'badge badge-red';
-    badge.textContent = 'Không kết nối được API — chạy npm run dev trước';
+    badge.textContent = 'Cannot reach API - start it with npm run dev first';
   }
 }
 

@@ -1,8 +1,8 @@
 -- ============================================
--- Helpdesk - Schema (chốt ngày 1)
+-- Helpdesk - Schema
 -- ============================================
 
--- 1. NGƯỜI DÙNG
+-- 1. USERS
 CREATE TABLE users (
   id            SERIAL PRIMARY KEY,
   email         VARCHAR(255) NOT NULL UNIQUE,
@@ -15,7 +15,7 @@ CREATE TABLE users (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 2. NHÓM SỰ CỐ (= nhãn SVM)
+-- 2. CATEGORIES (= SVM labels)
 CREATE TABLE categories (
   id          SERIAL PRIMARY KEY,
   name        VARCHAR(100) NOT NULL UNIQUE,
@@ -45,7 +45,7 @@ CREATE TABLE tickets (
 CREATE INDEX idx_tickets_status     ON tickets(status);
 CREATE INDEX idx_tickets_created_by ON tickets(created_by);
 
--- 4. TRAO ĐỔI TRÊN TICKET
+-- 4. TICKET COMMENTS
 CREATE TABLE ticket_comments (
   id          SERIAL PRIMARY KEY,
   ticket_id   INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
@@ -56,7 +56,7 @@ CREATE TABLE ticket_comments (
 
 CREATE INDEX idx_comments_ticket ON ticket_comments(ticket_id);
 
--- 5. LỊCH SỬ TICKET
+-- 5. TICKET HISTORY
 CREATE TABLE ticket_history (
   id          SERIAL PRIMARY KEY,
   ticket_id   INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,

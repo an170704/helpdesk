@@ -5,7 +5,7 @@ async function login(req, res) {
   const { email, password } = req.body;
 
   if (!email || !password) {
-    throw new AppError(400, 'Vui lòng nhập email và mật khẩu');
+    throw new AppError(400, 'Email and password are required');
   }
 
   const result = await authService.login(email.trim().toLowerCase(), password);
