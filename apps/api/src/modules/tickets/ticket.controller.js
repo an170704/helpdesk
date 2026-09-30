@@ -1,6 +1,6 @@
 const AppError = require('../../utils/AppError');
 const ticketService = require('./ticket.service');
-const { TICKET_STATUSES } = require('./ticket.constants');
+const { TICKET_STATUSES, TICKET_PRIORITIES } = require('./ticket.constants');
 
 function validateId(id) {
   if (!/^\d+$/.test(id)) {
@@ -36,9 +36,15 @@ async function createTicket(req, res) {
     throw new AppError(400, 'subject must not exceed 255 characters');
   }
 
+  const priority = req.body.priority || 'medium';
+  if (!TICKET_PRIORITIES.includes(priority)) {
+    throw new AppError(400, 'Invalid priority');
+  }
+
   const ticket = await ticketService.create({
     subject,
     description,
+    priority,
     createdBy: req.user.id,
   });
 
@@ -61,7 +67,8 @@ async function getTicket(req, res) {
   const ticket = await findTicketOrFail(id);
   assertCanView(ticket, req.user);
 
-  res.json({ ticket });
+  const attachments = await ticketService.findAttachments(id);
+  res.json({ ticket: { ...ticket, attachments } });
 }
 
 async function updateStatus(req, res) {

@@ -12,13 +12,13 @@ const TICKET_SELECT = `
   LEFT JOIN categories c ON c.id = t.category_id
 `;
 
-async function create({ subject, description, createdBy }) {
-  const ticket = await withTransaction(async (client) => {
+async function create({ subject, description, priority, createdBy }) {
+  return withTransaction(async (client) => {
     const { rows } = await client.query(
-      `INSERT INTO tickets (subject, description, created_by)
-       VALUES ($1, $2, $3)
+      `INSERT INTO tickets (subject, description, priority, created_by)
+       VALUES ($1, $2, $3, $4)
        RETURNING *`,
-      [subject, description, createdBy]
+      [subject, description, priority, createdBy]
     );
     const createdTicket = rows[0];
 
@@ -143,6 +143,17 @@ async function findHistory(ticketId) {
   return rows;
 }
 
+async function findAttachments(ticketId) {
+  const { rows } = await pool.query(
+    `SELECT id, file_name, file_url, created_at
+     FROM ticket_attachments
+     WHERE ticket_id = $1
+     ORDER BY id ASC`,
+    [ticketId]
+  );
+  return rows;
+}
+
 module.exports = {
   create,
   findById,
@@ -150,4 +161,5 @@ module.exports = {
   findAllByUser,
   updateStatus,
   findHistory,
+  findAttachments,
 };

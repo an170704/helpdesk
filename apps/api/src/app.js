@@ -4,12 +4,14 @@ const cors = require('cors');
 const pool = require('./config/db');
 const authRoutes = require('./modules/auth/auth.routes');
 const ticketRoutes = require('./modules/tickets/ticket.routes');
+const attachmentRoutes = require('./modules/attachments/attachment.routes');
 
 const app = express();
 
 app.use(cors());
 app.use(express.json());
 app.use(express.static(path.join(__dirname, '..', 'public')));
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
 
 app.get('/health', async (req, res) => {
   try {
@@ -21,6 +23,7 @@ app.get('/health', async (req, res) => {
 });
 
 app.use('/api/auth', authRoutes);
+app.use('/api/tickets', attachmentRoutes);
 app.use('/api/tickets', ticketRoutes);
 
 app.use((req, res) => {
