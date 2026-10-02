@@ -17,3 +17,15 @@ export const PRIORITY_BADGE = {
   medium: 'badge-blue',
   high: 'badge-red',
 }
+
+export const NEXT_STATUS = {
+  pending: 'in_progress',
+  in_progress: 'resolved',
+  resolved: 'closed',
+}
+
+export const NEXT_LABEL = {
+  pending: 'Start',
+  in_progress: 'Resolve',
+  resolved: 'Close',
+}

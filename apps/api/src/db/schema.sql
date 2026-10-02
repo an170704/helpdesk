@@ -17,11 +17,12 @@ CREATE TABLE users (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 2. CATEGORIES (= SVM labels)
+-- 2. CATEGORIES (= SVM labels, hierarchical: parent_id -> subcategories)
 CREATE TABLE categories (
   id          SERIAL PRIMARY KEY,
   name        VARCHAR(100) NOT NULL UNIQUE,
   description TEXT,
+  parent_id   INT REFERENCES categories(id),
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 

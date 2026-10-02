@@ -16,6 +16,22 @@ export function getHistory(id) {
   return api.get(`/tickets/${id}/history`).then((res) => res.data.history)
 }
 
+export function updateStatus(id, status, note) {
+  return api.patch(`/tickets/${id}/status`, { status, note }).then((res) => res.data.ticket)
+}
+
+export function updatePriority(id, priority) {
+  return api.patch(`/tickets/${id}/priority`, { priority }).then((res) => res.data.ticket)
+}
+
+export function assignTicket(id, payload) {
+  return api.patch(`/tickets/${id}/assign`, payload).then((res) => res.data.ticket)
+}
+
+export function deleteTicket(id) {
+  return api.delete(`/tickets/${id}`)
+}
+
 export function uploadAttachments(id, files) {
   const formData = new FormData()
   for (const file of files) {

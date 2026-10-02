@@ -25,14 +25,14 @@ const sections = computed(() => {
         title: 'Main',
         items: [
           { label: 'Dashboard', to: '/dashboard', icon: 'chart', soon: true },
-          { label: 'Ticket Queue', to: '/admin', icon: 'queue' },
+          { label: 'Tickets', to: '/admin', icon: 'queue' },
         ],
       },
       {
         title: 'Manage',
         items: [
           { label: 'Knowledge Base', to: '/kb', icon: 'book', soon: true },
-          { label: 'Users', to: '/users', icon: 'users', soon: true },
+          { label: 'Users', to: '/users', icon: 'users' },
           { label: 'Categories', to: '/categories', icon: 'tag', soon: true },
         ],
       },
@@ -44,7 +44,7 @@ const sections = computed(() => {
       {
         title: 'Main',
         items: [
-          { label: 'Assigned Tickets', to: '/assigned', icon: 'assigned', soon: true },
+          { label: 'Assigned Tickets', to: '/assigned', icon: 'assigned' },
         ],
       },
       {

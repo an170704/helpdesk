@@ -55,7 +55,8 @@ const stats = computed(() => {
 const byCategory = computed(() => {
   const map = new Map()
   for (const t of tickets.value) {
-    const name = t.category_name || 'Unclassified'
+    // Roll subcategories up to their parent for the chart
+    const name = t.category_parent_name || t.category_name || 'Unclassified'
     map.set(name, (map.get(name) || 0) + 1)
   }
   const total = tickets.value.length || 1

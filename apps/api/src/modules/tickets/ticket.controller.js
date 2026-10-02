@@ -11,8 +11,9 @@ function validateId(id) {
 function assertCanView(ticket, user) {
   const isOwner = ticket.created_by === user.id;
   const isAdmin = user.role === 'admin';
+  const isAssignedTech = user.role === 'technician' && ticket.assigned_to === user.id;
 
-  if (!isOwner && !isAdmin) {
+  if (!isOwner && !isAdmin && !isAssignedTech) {
     throw new AppError(403, 'You do not have permission to view this ticket');
   }
 }
@@ -52,10 +53,16 @@ async function createTicket(req, res) {
 }
 
 async function listTickets(req, res) {
-  const isAdmin = req.user.role === 'admin';
-  const tickets = isAdmin
-    ? await ticketService.findAll()
-    : await ticketService.findAllByUser(req.user.id);
+  const { role, id } = req.user;
+
+  let tickets;
+  if (role === 'admin') {
+    tickets = await ticketService.findAll();
+  } else if (role === 'technician') {
+    tickets = await ticketService.findAllForTechnician(id);
+  } else {
+    tickets = await ticketService.findAllByUser(id);
+  }
 
   res.json({ tickets });
 }
@@ -80,14 +87,79 @@ async function updateStatus(req, res) {
     throw new AppError(400, 'Invalid status');
   }
 
+  if (req.user.role === 'technician') {
+    const ticket = await findTicketOrFail(id);
+    if (ticket.assigned_to !== req.user.id) {
+      throw new AppError(403, 'You can only update tickets assigned to you');
+    }
+  }
+
   const ticket = await ticketService.updateStatus({
     ticketId: id,
     actorId: req.user.id,
+    actorRole: req.user.role,
     status,
     note,
   });
 
   res.json({ ticket });
+}
+
+async function updatePriority(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  const { priority } = req.body;
+  if (!TICKET_PRIORITIES.includes(priority)) {
+    throw new AppError(400, 'Invalid priority');
+  }
+
+  const ticket = await ticketService.updatePriority({
+    ticketId: id,
+    actorId: req.user.id,
+    priority,
+  });
+
+  res.json({ ticket });
+}
+
+async function assignTicket(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  const body = req.body || {};
+  const hasAssignedTo = Object.prototype.hasOwnProperty.call(body, 'assigned_to');
+  const hasGroupId = Object.prototype.hasOwnProperty.call(body, 'group_id');
+
+  if (!hasAssignedTo && !hasGroupId) {
+    throw new AppError(400, 'Provide assigned_to or group_id (or null to clear)');
+  }
+
+  const assignedTo = hasAssignedTo ? body.assigned_to : undefined;
+  const groupId = hasGroupId ? body.group_id : undefined;
+
+  for (const [key, value] of [['assigned_to', assignedTo], ['group_id', groupId]]) {
+    if (value != null && !/^\d+$/.test(String(value))) {
+      throw new AppError(400, `Invalid ${key}`);
+    }
+  }
+
+  const ticket = await ticketService.assignTicket({
+    ticketId: id,
+    actorId: req.user.id,
+    assignedTo,
+    groupId,
+  });
+
+  res.json({ ticket });
+}
+
+async function deleteTicket(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  await ticketService.deleteTicket(id);
+  res.status(204).end();
 }
 
 async function listHistory(req, res) {
@@ -106,5 +178,8 @@ module.exports = {
   listTickets,
   getTicket,
   updateStatus,
+  updatePriority,
+  assignTicket,
+  deleteTicket,
   listHistory,
 };

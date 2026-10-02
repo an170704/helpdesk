@@ -44,7 +44,7 @@ onMounted(load)
       <div class="meta-row">
         <StatusBadge :status="ticket.status" />
         <span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ ticket.priority }}</span>
-        <CategoryBadge :category="ticket.category_name" :confidence="ticket.confidence" />
+        <CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" />
       </div>
 
       <p class="description">{{ ticket.description }}</p>
@@ -62,7 +62,7 @@ onMounted(load)
       </div>
 
       <p class="muted small">
-        Created by user #{{ ticket.created_by }} · {{ formatDate(ticket.created_at) }}
+        Created by {{ ticket.created_by_name || 'user #' + ticket.created_by }} · {{ formatDate(ticket.created_at) }}
       </p>
 
       <h3>History</h3>
@@ -72,9 +72,14 @@ onMounted(load)
           <template v-if="entry.action === 'created'">
             <b>{{ entry.actor_name }}</b> created the ticket ({{ entry.to_status }})
           </template>
-          <template v-else>
+          <template v-else-if="entry.action === 'status_changed'">
             <b>{{ entry.actor_name }}</b>: {{ entry.from_status }} → <b>{{ entry.to_status }}</b>
             <span v-if="entry.note" class="muted">— "{{ entry.note }}"</span>
+          </template>
+          <template v-else>
+            <b>{{ entry.actor_name }}</b>
+            {{ entry.action === 'assigned' ? 'updated the assignment' : entry.action === 'priority_changed' ? 'changed the priority' : entry.action }}
+            <span v-if="entry.note" class="muted">— {{ entry.note }}</span>
           </template>
         </li>
       </ul>

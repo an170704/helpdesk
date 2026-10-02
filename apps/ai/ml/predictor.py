@@ -1,27 +1,32 @@
-CATEGORIES = ("Network", "Hardware", "Software", "Account", "Printer", "Other")
+CATEGORIES = (
+    "WiFi", "VPN", "Internet",
+    "PC/Laptop", "Monitor", "Printer", "Peripherals",
+    "Windows/OS", "Office/Applications",
+    "Password", "Permissions",
+    "Other",
+)
 
 KEYWORDS = {
-    "Network": [
-        "connect", "connection", "internet", "lan", "network", "offline",
-        "router", "switch", "vpn", "wi-fi", "wifi",
+    "WiFi": ["wifi", "wi-fi", "wireless", "access point", "signal"],
+    "VPN": ["vpn", "remote access", "tunnel"],
+    "Internet": ["internet", "connect", "connection", "network", "lan", "router", "switch", "offline", "web"],
+    "PC/Laptop": [
+        "computer", "laptop", "pc", "desktop", "boot", "startup", "power",
+        "cpu", "ram", "disk", "hard drive", "battery", "dead", "broken", "device",
     ],
-    "Hardware": [
-        "battery", "boot", "broken", "computer", "cpu", "dead", "device", "disk",
-        "hard drive", "hardware", "keyboard", "laptop", "monitor", "mouse",
-        "power", "ram", "screen", "startup",
-    ],
-    "Software": [
-        "app", "application", "browser", "bug", "crash", "error", "excel", "freeze",
-        "install", "operating system", "outlook", "software", "update", "windows", "word",
-    ],
-    "Account": [
-        "access", "account", "credentials", "email", "forgot", "locked",
-        "login", "password", "permission", "reset", "sign in", "username",
-    ],
+    "Monitor": ["monitor", "screen", "display"],
     "Printer": [
-        "cartridge", "ink", "jam", "paper", "photocopy", "print", "printer",
-        "printing", "scan", "scanner", "toner",
+        "printer", "print", "printing", "scan", "scanner", "paper", "jam",
+        "ink", "toner", "cartridge", "photocopy",
     ],
+    "Peripherals": ["keyboard", "mouse", "headset", "webcam", "usb", "dock", "charger", "speaker"],
+    "Windows/OS": ["windows", "operating system", "os", "blue screen", "update", "install"],
+    "Office/Applications": [
+        "excel", "word", "outlook", "teams", "browser", "app", "application",
+        "software", "crash", "freeze", "bug", "error",
+    ],
+    "Password": ["password", "login", "sign in", "forgot", "reset", "locked", "username", "credentials"],
+    "Permissions": ["permission", "access", "rights", "role", "shared folder"],
 }
 
 DEFAULT_CATEGORY = "Other"

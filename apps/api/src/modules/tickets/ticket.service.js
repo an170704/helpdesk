@@ -5,15 +5,23 @@ const aiClient = require('../../services/aiClient');
 const categoryService = require('../categories/category.service');
 const { ALLOWED_TRANSITIONS } = require('./ticket.constants');
 
-// Shared SELECT: joins categories to include category_name
+// Shared SELECT: joins categories, assigned technician, group and creator names
 const TICKET_SELECT = `
-  SELECT t.*, c.name AS category_name
+  SELECT t.*, c.name AS category_name,
+         cp.name AS category_parent_name,
+         au.full_name AS assigned_name,
+         gg.name AS group_name,
+         cu.full_name AS created_by_name
   FROM tickets t
   LEFT JOIN categories c ON c.id = t.category_id
+  LEFT JOIN categories cp ON cp.id = c.parent_id
+  LEFT JOIN users au ON au.id = t.assigned_to
+  LEFT JOIN groups gg ON gg.id = t.group_id
+  LEFT JOIN users cu ON cu.id = t.created_by
 `;
 
 async function create({ subject, description, priority, createdBy }) {
-  return withTransaction(async (client) => {
+  const ticket = await withTransaction(async (client) => {
     const { rows } = await client.query(
       `INSERT INTO tickets (subject, description, priority, created_by)
        VALUES ($1, $2, $3, $4)
@@ -85,35 +93,51 @@ async function findAllByUser(userId) {
   return rows;
 }
 
-async function updateStatus({ ticketId, actorId, status, note }) {
-  return withTransaction(async (client) => {
+async function findAllForTechnician(userId) {
+  const { rows } = await pool.query(
+    `${TICKET_SELECT} WHERE t.assigned_to = $1 OR t.created_by = $1 ORDER BY t.created_at DESC`,
+    [userId]
+  );
+  return rows;
+}
+
+async function updateStatus({ ticketId, actorId, actorRole, status, note }) {
+  const ticket = await withTransaction(async (client) => {
     const { rows } = await client.query(
       'SELECT * FROM tickets WHERE id = $1 FOR UPDATE',
       [ticketId]
     );
-    const ticket = rows[0];
+    const current = rows[0];
 
-    if (!ticket) {
+    if (!current) {
       throw new AppError(404, 'Ticket not found');
     }
 
-    const allowed = ALLOWED_TRANSITIONS[ticket.status] || [];
-    if (!allowed.includes(status)) {
-      throw new AppError(
-        400,
-        `Cannot change status from "${ticket.status}" to "${status}"`
-      );
+    if (current.status === status) {
+      throw new AppError(400, `Ticket is already "${status}"`);
+    }
+
+    // Admins may set any status (including reopening); technicians follow the forward-only flow
+    if (actorRole !== 'admin') {
+      const allowed = ALLOWED_TRANSITIONS[current.status] || [];
+      if (!allowed.includes(status)) {
+        throw new AppError(
+          400,
+          `Cannot change status from "${current.status}" to "${status}"`
+        );
+      }
     }
 
     const finishedAt = new Date();
-    const resolvedAt = status === 'resolved' ? finishedAt : null;
-    const closedAt = status === 'closed' ? finishedAt : null;
+    const isReopen = status === 'pending' || status === 'in_progress';
+    const resolvedAt = status === 'resolved' ? finishedAt : isReopen ? null : current.resolved_at;
+    const closedAt = status === 'closed' ? finishedAt : isReopen ? null : current.closed_at;
 
     const { rows: updatedRows } = await client.query(
       `UPDATE tickets
        SET status      = $1,
-           resolved_at = COALESCE($3, resolved_at),
-           closed_at   = COALESCE($4, closed_at),
+           resolved_at = $3,
+           closed_at   = $4,
            updated_at  = now()
        WHERE id = $2
        RETURNING *`,
@@ -123,11 +147,128 @@ async function updateStatus({ ticketId, actorId, status, note }) {
     await client.query(
       `INSERT INTO ticket_history (ticket_id, actor_id, action, from_status, to_status, note)
        VALUES ($1, $2, 'status_changed', $3, $4, $5)`,
-      [ticketId, actorId, ticket.status, status, note || null]
+      [ticketId, actorId, current.status, status, note || null]
     );
 
     return updatedRows[0];
   });
+
+  return findById(ticket.id);
+}
+
+async function updatePriority({ ticketId, actorId, priority }) {
+  const ticket = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      'SELECT * FROM tickets WHERE id = $1 FOR UPDATE',
+      [ticketId]
+    );
+    const current = rows[0];
+
+    if (!current) {
+      throw new AppError(404, 'Ticket not found');
+    }
+    if (current.priority === priority) {
+      throw new AppError(400, `Priority is already "${priority}"`);
+    }
+
+    const { rows: updatedRows } = await client.query(
+      `UPDATE tickets
+       SET priority = $2, updated_at = now()
+       WHERE id = $1
+       RETURNING *`,
+      [ticketId, priority]
+    );
+
+    await client.query(
+      `INSERT INTO ticket_history (ticket_id, actor_id, action, note)
+       VALUES ($1, $2, 'priority_changed', $3)`,
+      [ticketId, actorId, `from ${current.priority} to ${priority}`]
+    );
+
+    return updatedRows[0];
+  });
+
+  return findById(ticket.id);
+}
+
+async function assignTicket({ ticketId, actorId, assignedTo, groupId }) {
+  const ticket = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      'SELECT * FROM tickets WHERE id = $1 FOR UPDATE',
+      [ticketId]
+    );
+    const ticket = rows[0];
+
+    if (!ticket) {
+      throw new AppError(404, 'Ticket not found');
+    }
+    if (ticket.status === 'closed') {
+      throw new AppError(400, 'Cannot assign a closed ticket');
+    }
+
+    let technician = null;
+    if (assignedTo != null) {
+      const tech = (
+        await client.query('SELECT full_name, role FROM users WHERE id = $1', [assignedTo])
+      ).rows[0];
+      if (!tech) {
+        throw new AppError(404, 'Technician not found');
+      }
+      if (tech.role !== 'technician') {
+        throw new AppError(400, 'assigned_to must be a technician');
+      }
+      technician = tech;
+    }
+
+    let group = null;
+    if (groupId != null) {
+      const g = (
+        await client.query('SELECT name FROM groups WHERE id = $1', [groupId])
+      ).rows[0];
+      if (!g) {
+        throw new AppError(404, 'Group not found');
+      }
+      group = g;
+    }
+
+    const nextAssignedTo = assignedTo === undefined ? ticket.assigned_to : assignedTo;
+    const nextGroupId = groupId === undefined ? ticket.group_id : groupId;
+
+    const { rows: updatedRows } = await client.query(
+      `UPDATE tickets
+       SET assigned_to = $2, group_id = $3, updated_at = now()
+       WHERE id = $1
+       RETURNING *`,
+      [ticketId, nextAssignedTo, nextGroupId]
+    );
+
+    const changes = [];
+    if (assignedTo !== undefined) {
+      changes.push(technician ? `assigned to ${technician.full_name}` : 'assignment removed');
+    }
+    if (groupId !== undefined) {
+      changes.push(group ? `group: ${group.name}` : 'group removed');
+    }
+
+    const note = changes.length ? changes.join(', ') : null;
+
+    await client.query(
+      `INSERT INTO ticket_history (ticket_id, actor_id, action, note)
+       VALUES ($1, $2, 'assigned', $3)`,
+      [ticketId, actorId, note]
+    );
+
+    return updatedRows[0];
+  });
+
+  return findById(ticket.id);
+}
+
+async function deleteTicket(id) {
+  const { rowCount } = await pool.query('DELETE FROM tickets WHERE id = $1', [id]);
+  if (rowCount === 0) {
+    throw new AppError(404, 'Ticket not found');
+  }
 }
 
 async function findHistory(ticketId) {
@@ -159,7 +300,11 @@ module.exports = {
   findById,
   findAll,
   findAllByUser,
+  findAllForTechnician,
   updateStatus,
+  updatePriority,
+  assignTicket,
+  deleteTicket,
   findHistory,
   findAttachments,
 };

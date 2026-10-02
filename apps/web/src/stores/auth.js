@@ -23,7 +23,7 @@ export const useAuthStore = defineStore('auth', () => {
 
   const homePath = computed(() => {
     if (isAdmin.value) return '/admin'
-    if (isTechnician.value) return '/tickets'
+    if (isTechnician.value) return '/assigned'
     return '/home'
   })
 

@@ -6,6 +6,7 @@ import { PRIORITY_BADGE } from '../../utils/status'
 import { formatDate } from '../../utils/format'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
+import Pagination from '../../components/Pagination.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -13,8 +14,11 @@ const router = useRouter()
 const tickets = ref([])
 const loading = ref(true)
 const error = ref('')
-const statusFilter = ref('all')
-const sortOrder = ref('newest')
+const statusFilter = ref(route.query.status || 'all')
+const sortOrder = ref(route.query.sort || 'newest')
+const searchQuery = ref(route.query.search || '')
+const page = ref(Math.max(1, Number(route.query.page) || 1))
+const pageSize = ref(Number(route.query.size) || 10)
 
 const filteredTickets = computed(() => {
   let list = [...tickets.value]
@@ -26,6 +30,11 @@ const filteredTickets = computed(() => {
     list = list.filter((t) => t.status === status)
   }
 
+  const query = searchQuery.value.trim().toLowerCase()
+  if (query) {
+    list = list.filter((t) => t.subject.toLowerCase().includes(query))
+  }
+
   list.sort((a, b) => {
     const diff = new Date(b.created_at) - new Date(a.created_at)
     return sortOrder.value === 'newest' ? diff : -diff
@@ -33,6 +42,47 @@ const filteredTickets = computed(() => {
 
   return list
 })
+
+const pagedTickets = computed(() => {
+  const start = (page.value - 1) * pageSize.value
+  return filteredTickets.value.slice(start, start + pageSize.value)
+})
+
+watch([statusFilter, sortOrder, searchQuery], () => {
+  page.value = 1
+})
+
+// Keep the URL in sync so going back from a ticket restores the same page and filters
+watch([statusFilter, sortOrder, searchQuery, page, pageSize], () => {
+  router.replace({
+    query: {
+      ...(statusFilter.value !== 'all' && { status: statusFilter.value }),
+      ...(sortOrder.value !== 'newest' && { sort: sortOrder.value }),
+      ...(searchQuery.value.trim() && { search: searchQuery.value.trim() }),
+      ...(page.value > 1 && { page: String(page.value) }),
+      ...(pageSize.value !== 10 && { size: String(pageSize.value) }),
+    },
+  })
+})
+
+watch(
+  () => route.query,
+  (query) => {
+    statusFilter.value = query.status || 'all'
+    sortOrder.value = query.sort || 'newest'
+    searchQuery.value = query.search || ''
+    page.value = Math.max(1, Number(query.page) || 1)
+    pageSize.value = Number(query.size) || 10
+  }
+)
+
+watch(
+  () => filteredTickets.value.length,
+  (length) => {
+    const maxPage = Math.max(1, Math.ceil(length / pageSize.value))
+    if (page.value > maxPage) page.value = maxPage
+  }
+)
 
 async function load() {
   loading.value = true
@@ -86,6 +136,14 @@ onMounted(() => {
         <option value="newest">Newest first</option>
         <option value="oldest">Oldest first</option>
       </select>
+
+      <div class="search-box">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="11" cy="11" r="8" />
+          <path d="m21 21-4.3-4.3" />
+        </svg>
+        <input v-model="searchQuery" type="text" placeholder="Search subject..." />
+      </div>
     </div>
 
     <p v-if="error" class="error">{{ error }}</p>
@@ -110,7 +168,7 @@ onMounted(() => {
         </thead>
         <tbody>
           <tr
-            v-for="ticket in filteredTickets"
+            v-for="ticket in pagedTickets"
             :key="ticket.id"
             class="row-link"
             @click="openTicket(ticket.id)"
@@ -119,11 +177,17 @@ onMounted(() => {
             <td>{{ ticket.subject }}</td>
             <td><StatusBadge :status="ticket.status" /></td>
             <td><span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ ticket.priority }}</span></td>
-            <td><CategoryBadge :category="ticket.category_name" :confidence="ticket.confidence" /></td>
+            <td><CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" /></td>
             <td class="muted">{{ formatDate(ticket.created_at) }}</td>
           </tr>
         </tbody>
       </table>
     </div>
+
+    <Pagination
+      v-model:page="page"
+      v-model:pageSize="pageSize"
+      :total="filteredTickets.length"
+    />
   </section>
 </template>

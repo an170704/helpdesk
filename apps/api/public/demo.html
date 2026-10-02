@@ -596,12 +596,12 @@ async function runTests() {
       res.status === 400, `HTTP ${res.status} - ${res.message}`);
 
     if (ticket && !ticket.category_name) {
-      await add('TC09', 'AI classifies network ticket', 'Network + confidence > 0',
+      await add('TC09', 'AI classifies network ticket', 'Internet (subcategory of Network)',
         false, 'Ticket has no category - AI service (port 8000) not running?', true);
     } else {
-      await add('TC09', 'AI classifies network ticket', 'Network + confidence > 0',
-        ticket && ticket.category_name === 'Network' && ticket.confidence > 0,
-        ticket ? `Category: ${ticket.category_name}, confidence: ${ticket.confidence}` : 'ticket was not created');
+      await add('TC09', 'AI classifies network ticket', 'Internet (subcategory of Network)',
+        ticket && ticket.category_name === 'Internet' && ticket.category_parent_name === 'Network',
+        ticket ? `Category: ${ticket.category_parent_name} > ${ticket.category_name}` : 'ticket was not created');
     }
 
     res = await attempt(() => api('GET', '/tickets', { token: userToken }));
@@ -650,12 +650,22 @@ async function runTests() {
       body: { subject: '[demo] skip transition', description: 'try pending to closed directly' },
     }));
     const jumpTicket = res.data ? res.data.ticket : null;
-    res = await attempt(() => patchStatus(jumpTicket ? jumpTicket.id : 0, adminToken, 'closed'));
-    await add('TC17', 'Skip transition pending to closed', '400 - invalid transition blocked',
+
+    res = await attempt(() => login('tech1@company.com', '123456'));
+    const techToken = res.data ? res.data.token : null;
+    const techId = res.data ? res.data.user.id : null;
+
+    await attempt(() => api('PATCH', `/tickets/${jumpTicket ? jumpTicket.id : 0}/assign`, {
+      token: adminToken,
+      body: { assigned_to: techId },
+    }));
+
+    res = await attempt(() => patchStatus(jumpTicket ? jumpTicket.id : 0, techToken, 'closed'));
+    await add('TC17', 'Technician skips pending to closed', '400 - forward-only flow enforced for technicians',
       res.status === 400, `HTTP ${res.status} - ${res.message}`);
 
     res = await attempt(() => patchStatus(jumpTicket ? jumpTicket.id : 0, userToken, 'in_progress'));
-    await add('TC18', 'User changes a ticket status', '403 - admin only',
+    await add('TC18', 'User changes a ticket status', '403 - requester blocked',
       res.status === 403, `HTTP ${res.status}`);
 
     res = await attempt(() => api('GET', `/tickets/${ticketId}/history`, { token: userToken }));

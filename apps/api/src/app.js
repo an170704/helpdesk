@@ -5,6 +5,8 @@ const pool = require('./config/db');
 const authRoutes = require('./modules/auth/auth.routes');
 const ticketRoutes = require('./modules/tickets/ticket.routes');
 const attachmentRoutes = require('./modules/attachments/attachment.routes');
+const groupRoutes = require('./modules/groups/group.routes');
+const userRoutes = require('./modules/users/user.routes');
 
 const app = express();
 
@@ -25,6 +27,8 @@ app.get('/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/tickets', attachmentRoutes);
 app.use('/api/tickets', ticketRoutes);
+app.use('/api/groups', groupRoutes);
+app.use('/api/users', userRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Resource not found' });
