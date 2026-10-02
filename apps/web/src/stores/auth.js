@@ -7,14 +7,16 @@ const USER_KEY = 'user'
 
 function readStoredUser() {
   try {
-    return JSON.parse(localStorage.getItem(USER_KEY) || 'null')
+    return JSON.parse(sessionStorage.getItem(USER_KEY) || 'null')
   } catch {
     return null
   }
 }
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem(TOKEN_KEY) || '')
+  // sessionStorage keeps each browser tab on its own session, so logging in
+  // with another account in a second tab never affects this one
+  const token = ref(sessionStorage.getItem(TOKEN_KEY) || '')
   const user = ref(readStoredUser())
 
   const isAuthenticated = computed(() => !!token.value)
@@ -22,7 +24,7 @@ export const useAuthStore = defineStore('auth', () => {
   const isTechnician = computed(() => user.value?.role === 'technician')
 
   const homePath = computed(() => {
-    if (isAdmin.value) return '/admin'
+    if (isAdmin.value) return '/dashboard'
     if (isTechnician.value) return '/assigned'
     return '/home'
   })
@@ -31,15 +33,15 @@ export const useAuthStore = defineStore('auth', () => {
     const { data } = await api.post('/auth/login', { email, password })
     token.value = data.token
     user.value = data.user
-    localStorage.setItem(TOKEN_KEY, data.token)
-    localStorage.setItem(USER_KEY, JSON.stringify(data.user))
+    sessionStorage.setItem(TOKEN_KEY, data.token)
+    sessionStorage.setItem(USER_KEY, JSON.stringify(data.user))
   }
 
   function logout() {
     token.value = ''
     user.value = null
-    localStorage.removeItem(TOKEN_KEY)
-    localStorage.removeItem(USER_KEY)
+    sessionStorage.removeItem(TOKEN_KEY)
+    sessionStorage.removeItem(USER_KEY)
   }
 
   return { token, user, isAuthenticated, isAdmin, isTechnician, homePath, login, logout }

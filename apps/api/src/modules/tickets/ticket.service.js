@@ -3,6 +3,7 @@ const withTransaction = require('../../utils/withTransaction');
 const AppError = require('../../utils/AppError');
 const aiClient = require('../../services/aiClient');
 const categoryService = require('../categories/category.service');
+const notificationService = require('../notifications/notification.service');
 const { ALLOWED_TRANSITIONS } = require('./ticket.constants');
 
 // Shared SELECT: joins categories, assigned technician, group and creator names
@@ -37,6 +38,12 @@ async function create({ subject, description, priority, createdBy }) {
     );
 
     return createdTicket;
+  });
+
+  await notificationService.notifyAdmins(createdBy, {
+    type: 'ticket_created',
+    ticketId: ticket.id,
+    message: `New ticket #${ticket.id}: ${ticket.subject}`,
   });
 
   return await classify(ticket);
@@ -153,7 +160,17 @@ async function updateStatus({ ticketId, actorId, actorRole, status, note }) {
     return updatedRows[0];
   });
 
-  return findById(ticket.id);
+  const updated = await findById(ticket.id);
+
+  if (updated.created_by !== actorId) {
+    await notificationService.createMany([updated.created_by], {
+      type: 'status_changed',
+      ticketId: updated.id,
+      message: `Ticket #${updated.id} status changed to ${status}`,
+    });
+  }
+
+  return updated;
 }
 
 async function updatePriority({ ticketId, actorId, priority }) {
@@ -261,7 +278,17 @@ async function assignTicket({ ticketId, actorId, assignedTo, groupId }) {
     return updatedRows[0];
   });
 
-  return findById(ticket.id);
+  const updated = await findById(ticket.id);
+
+  if (assignedTo != null && assignedTo !== actorId) {
+    await notificationService.createMany([assignedTo], {
+      type: 'assigned',
+      ticketId: updated.id,
+      message: `Ticket #${updated.id} was assigned to you: ${updated.subject}`,
+    });
+  }
+
+  return updated;
 }
 
 async function deleteTicket(id) {

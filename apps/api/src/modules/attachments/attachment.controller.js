@@ -24,7 +24,11 @@ async function uploadAttachments(req, res) {
     throw new AppError(400, 'No valid files uploaded (images only, max 5MB each)');
   }
 
-  const attachments = await attachmentService.create(id, req.user.id, files);
+  const attachments = await attachmentService.create({
+    ticketId: id,
+    uploadedBy: req.user.id,
+    files,
+  });
   res.status(201).json({ attachments });
 }
 

@@ -1,19 +1,82 @@
 <script setup>
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getTicket, getHistory } from '../../api/tickets'
+import { useAuthStore } from '../../stores/auth'
+import { getTicket, getHistory, getComments, createComment } from '../../api/tickets'
+import { getArticles } from '../../api/kb'
 import { PRIORITY_BADGE } from '../../utils/status'
-import { formatDate } from '../../utils/format'
+import { formatDate, timeAgo } from '../../utils/format'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 
 const route = useRoute()
 const router = useRouter()
+const auth = useAuthStore()
 
 const ticket = ref(null)
 const history = ref([])
+const comments = ref([])
 const loading = ref(true)
 const error = ref('')
+
+const newComment = ref('')
+const isInternal = ref(false)
+const files = ref([])
+const fileInput = ref(null)
+const kbArticles = ref([])
+const kbPick = ref('')
+const sending = ref(false)
+const commentError = ref('')
+
+const isStaff = computed(() => auth.isAdmin || auth.isTechnician)
+
+function initials(name) {
+  return (name || '')
+    .split(' ')
+    .map((word) => word[0])
+    .slice(0, 2)
+    .join('')
+    .toUpperCase()
+}
+
+function roleBadge(role) {
+  if (role === 'admin') return 'badge-admin'
+  if (role === 'technician') return 'badge-tech'
+  return 'badge-user'
+}
+
+function escapeHtml(value) {
+  return String(value)
+    .replaceAll('&', '&amp;')
+    .replaceAll('<', '&lt;')
+    .replaceAll('>', '&gt;')
+    .replaceAll('"', '&quot;')
+    .replaceAll("'", '&#39;')
+}
+
+// Comment text is escaped first, then only KB links are turned into anchors
+function formatBody(body) {
+  return escapeHtml(body).replace(
+    /\[([^\]]+)\]\((\/faq\/\d+)\)/g,
+    '<a href="$2" class="link">$1</a>'
+  )
+}
+
+function onFilesChange(event) {
+  files.value = Array.from(event.target.files)
+}
+
+function insertKb() {
+  const id = kbPick.value
+  if (!id) return
+
+  const article = kbArticles.value.find((a) => String(a.id) === String(id))
+  if (article) {
+    const link = `[${article.title}](/faq/${article.id})`
+    newComment.value = newComment.value ? `${newComment.value.trimEnd()}\n${link}` : link
+  }
+  kbPick.value = ''
+}
 
 async function load() {
   loading.value = true
@@ -21,6 +84,7 @@ async function load() {
   try {
     ticket.value = await getTicket(route.params.id)
     history.value = await getHistory(route.params.id)
+    comments.value = await getComments(route.params.id)
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to load ticket'
   } finally {
@@ -28,7 +92,42 @@ async function load() {
   }
 }
 
-onMounted(load)
+async function loadKb() {
+  try {
+    kbArticles.value = await getArticles()
+  } catch {
+    kbArticles.value = []
+  }
+}
+
+async function submitComment() {
+  if (!newComment.value.trim()) return
+
+  commentError.value = ''
+  sending.value = true
+
+  try {
+    await createComment(ticket.value.id, {
+      body: newComment.value.trim(),
+      is_internal: isInternal.value,
+      files: files.value,
+    })
+    newComment.value = ''
+    isInternal.value = false
+    files.value = []
+    fileInput.value.value = ''
+    comments.value = await getComments(ticket.value.id)
+  } catch (err) {
+    commentError.value = err.response?.data?.message || 'Could not send the reply'
+  } finally {
+    sending.value = false
+  }
+}
+
+onMounted(() => {
+  load()
+  if (isStaff.value) loadKb()
+})
 </script>
 
 <template>
@@ -64,6 +163,93 @@ onMounted(load)
       <p class="muted small">
         Created by {{ ticket.created_by_name || 'user #' + ticket.created_by }} · {{ formatDate(ticket.created_at) }}
       </p>
+
+      <h3>Conversation</h3>
+      <p v-if="!comments.length" class="muted">No messages yet. Start the conversation below.</p>
+
+      <div v-else class="comments">
+        <div
+          v-for="comment in comments"
+          :key="comment.id"
+          class="comment"
+          :class="{ internal: comment.is_internal }"
+        >
+          <div class="comment-avatar">{{ initials(comment.author_name) }}</div>
+          <div class="comment-main">
+            <div class="comment-head">
+              <b>{{ comment.author_name }}</b>
+              <span class="badge" :class="roleBadge(comment.author_role)">{{ comment.author_role }}</span>
+              <span class="muted small">{{ timeAgo(comment.created_at) }}</span>
+              <span v-if="comment.is_internal" class="badge badge-amber">Internal note</span>
+            </div>
+            <p class="comment-text" v-html="formatBody(comment.body)"></p>
+            <div v-if="comment.attachments && comment.attachments.length" class="comment-attachments">
+              <a
+                v-for="attachment in comment.attachments"
+                :key="attachment.id"
+                :href="attachment.file_url"
+                target="_blank"
+                rel="noopener"
+                class="link"
+              >
+                {{ attachment.file_name }}
+              </a>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <form class="reply-box" :class="{ 'reply-internal-mode': isInternal }" @submit.prevent="submitComment">
+        <textarea
+          v-model="newComment"
+          rows="2"
+          :placeholder="isInternal ? 'Write an internal note (staff only, the requester will not see it)...' : 'Type your reply...'"
+        ></textarea>
+
+        <div v-if="files.length" class="reply-files">
+          <span v-for="file in files" :key="file.name" class="reply-file">{{ file.name }}</span>
+        </div>
+
+        <div class="reply-actions">
+          <div class="reply-tools">
+            <label class="icon-btn" title="Attach images">
+              <input
+                ref="fileInput"
+                type="file"
+                accept=".png,.jpg,.jpeg,.gif,.webp"
+                multiple
+                hidden
+                @change="onFilesChange"
+              />
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48" />
+              </svg>
+            </label>
+
+            <select v-if="isStaff" v-model="kbPick" class="kb-picker" @change="insertKb">
+              <option value="">Insert KB article...</option>
+              <option v-for="article in kbArticles" :key="article.id" :value="article.id">
+                {{ article.title }}
+              </option>
+            </select>
+
+            <label v-if="isStaff" class="checkbox-row reply-internal">
+              <input v-model="isInternal" type="checkbox" />
+              Internal note (hidden from the requester)
+            </label>
+          </div>
+
+          <button
+            class="btn btn-small"
+            :class="{ 'btn-warning': isInternal }"
+            type="submit"
+            :disabled="sending || !newComment.trim()"
+          >
+            {{ sending ? 'Sending...' : isInternal ? 'Send internal note' : 'Send' }}
+          </button>
+        </div>
+        <p v-if="commentError" class="error">{{ commentError }}</p>
+      </form>
 
       <h3>History</h3>
       <ul class="timeline">

@@ -1,20 +1,11 @@
 const AppError = require('../../utils/AppError');
 const ticketService = require('./ticket.service');
+const { assertCanView } = require('./ticket.access');
 const { TICKET_STATUSES, TICKET_PRIORITIES } = require('./ticket.constants');
 
 function validateId(id) {
   if (!/^\d+$/.test(id)) {
     throw new AppError(400, 'Invalid ID');
-  }
-}
-
-function assertCanView(ticket, user) {
-  const isOwner = ticket.created_by === user.id;
-  const isAdmin = user.role === 'admin';
-  const isAssignedTech = user.role === 'technician' && ticket.assigned_to === user.id;
-
-  if (!isOwner && !isAdmin && !isAssignedTech) {
-    throw new AppError(403, 'You do not have permission to view this ticket');
   }
 }
 

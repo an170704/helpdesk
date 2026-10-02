@@ -39,3 +39,17 @@ export function uploadAttachments(id, files) {
   }
   return api.post(`/tickets/${id}/attachments`, formData).then((res) => res.data.attachments)
 }
+
+export function getComments(id) {
+  return api.get(`/tickets/${id}/comments`).then((res) => res.data.comments)
+}
+
+export function createComment(id, { body, is_internal = false, files = [] }) {
+  const formData = new FormData()
+  formData.append('body', body)
+  formData.append('is_internal', is_internal ? 'true' : 'false')
+  for (const file of files) {
+    formData.append('files', file)
+  }
+  return api.post(`/tickets/${id}/comments`, formData).then((res) => res.data.comment)
+}

@@ -73,6 +73,7 @@ CREATE TABLE ticket_comments (
   ticket_id   INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
   author_id   INT NOT NULL REFERENCES users(id),
   body        TEXT NOT NULL,
+  is_internal BOOLEAN NOT NULL DEFAULT FALSE,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
@@ -106,6 +107,7 @@ CREATE TABLE kb_articles (
 CREATE TABLE ticket_attachments (
   id          SERIAL PRIMARY KEY,
   ticket_id   INT NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+  comment_id  INT REFERENCES ticket_comments(id) ON DELETE CASCADE,
   file_name   VARCHAR(255) NOT NULL,
   file_url    VARCHAR(500) NOT NULL,
   uploaded_by INT REFERENCES users(id),
@@ -113,3 +115,23 @@ CREATE TABLE ticket_attachments (
 );
 
 CREATE INDEX idx_attachments_ticket ON ticket_attachments(ticket_id);
+
+-- 10. NOTIFICATIONS
+CREATE TABLE notifications (
+  id         SERIAL PRIMARY KEY,
+  user_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  type       VARCHAR(30) NOT NULL,
+  ticket_id  INT REFERENCES tickets(id) ON DELETE CASCADE,
+  message    TEXT NOT NULL,
+  is_read    BOOLEAN NOT NULL DEFAULT FALSE,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_notifications_user ON notifications(user_id, is_read);
+
+-- 11. SETTINGS (key-value app configuration, e.g. chatbot API key)
+CREATE TABLE settings (
+  key        VARCHAR(50) PRIMARY KEY,
+  value      TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);

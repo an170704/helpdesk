@@ -34,9 +34,31 @@ const routes = [
         component: () => import('../views/user/TicketDetailView.vue'),
       },
       {
+        path: 'faq',
+        name: 'faq',
+        component: () => import('../views/user/FAQView.vue'),
+      },
+      {
+        path: 'faq/:id',
+        name: 'faq-article',
+        component: () => import('../views/user/FAQArticleView.vue'),
+      },
+      {
         path: 'admin',
         name: 'admin-queue',
         component: () => import('../views/admin/AdminQueueView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'dashboard',
+        name: 'dashboard',
+        component: () => import('../views/admin/DashboardView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'chatbot',
+        name: 'chatbot-settings',
+        component: () => import('../views/admin/ChatbotView.vue'),
         meta: { roles: ['admin'] },
       },
       {

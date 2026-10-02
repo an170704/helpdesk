@@ -7,6 +7,11 @@ const ticketRoutes = require('./modules/tickets/ticket.routes');
 const attachmentRoutes = require('./modules/attachments/attachment.routes');
 const groupRoutes = require('./modules/groups/group.routes');
 const userRoutes = require('./modules/users/user.routes');
+const notificationRoutes = require('./modules/notifications/notification.routes');
+const commentRoutes = require('./modules/comments/comment.routes');
+const kbRoutes = require('./modules/kb/kb.routes');
+const statsRoutes = require('./modules/stats/stats.routes');
+const settingRoutes = require('./modules/settings/setting.routes');
 
 const app = express();
 
@@ -26,9 +31,14 @@ app.get('/health', async (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/tickets', attachmentRoutes);
+app.use('/api/tickets', commentRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/notifications', notificationRoutes);
+app.use('/api/kb', kbRoutes);
+app.use('/api/stats', statsRoutes);
+app.use('/api/settings', settingRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Resource not found' });
