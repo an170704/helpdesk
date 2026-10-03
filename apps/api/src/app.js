@@ -12,6 +12,7 @@ const commentRoutes = require('./modules/comments/comment.routes');
 const kbRoutes = require('./modules/kb/kb.routes');
 const statsRoutes = require('./modules/stats/stats.routes');
 const settingRoutes = require('./modules/settings/setting.routes');
+const feedbackRoutes = require('./modules/feedback/feedback.routes');
 
 const app = express();
 
@@ -32,6 +33,7 @@ app.get('/health', async (req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/tickets', attachmentRoutes);
 app.use('/api/tickets', commentRoutes);
+app.use('/api/tickets', feedbackRoutes);
 app.use('/api/tickets', ticketRoutes);
 app.use('/api/groups', groupRoutes);
 app.use('/api/users', userRoutes);

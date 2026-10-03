@@ -5,8 +5,8 @@ import { getTickets, updateStatus, updatePriority, assignTicket, deleteTicket } 
 import { getTechnicians } from '../../api/users'
 import { getGroups } from '../../api/groups'
 import { STATUS_LABEL } from '../../utils/status'
-import { formatDate } from '../../utils/format'
-import StatusBadge from '../../components/StatusBadge.vue'
+import { formatDate, timeAgo } from '../../utils/format'
+import { initials, avatarColor } from '../../utils/avatar'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 import Pagination from '../../components/Pagination.vue'
 
@@ -124,10 +124,12 @@ async function deleteSelected() {
 watch([statusFilter, priorityFilter, sortOrder, searchQuery], () => {
   page.value = 1
   selected.value = []
+  pending.value = {}
 })
 
 watch(page, () => {
   selected.value = []
+  pending.value = {}
 })
 
 // Keep the URL in sync so going back from a ticket restores the same page and filters
@@ -200,41 +202,107 @@ async function loadOptions() {
 
 const STATUSES = ['pending', 'in_progress', 'resolved', 'closed']
 
-async function changeStatus(ticket, status) {
-  try {
-    await updateStatus(ticket.id, status, 'Updated from the admin queue')
-    showNotice(`Ticket #${ticket.id} moved to ${STATUS_LABEL[status]}`)
-    await load()
-  } catch (err) {
-    showNotice(err.response?.data?.message || 'Could not change status', 'error')
-    await load()
+// Pending inline edits: { [ticketId]: { status?, priority?, assigned_to?, group_id? } }
+const pending = ref({})
+const applying = ref(false)
+
+const pendingCount = computed(() =>
+  Object.values(pending.value).reduce((sum, changes) => sum + Object.keys(changes).length, 0)
+)
+
+function fieldValue(ticket, field, fallback) {
+  const changes = pending.value[ticket.id]
+  if (changes && Object.prototype.hasOwnProperty.call(changes, field)) {
+    return changes[field]
   }
+  return fallback
 }
 
-async function changePriority(ticket, priority) {
-  try {
-    await updatePriority(ticket.id, priority)
-    showNotice(`Ticket #${ticket.id} priority set to ${priority}`)
-    await load()
-  } catch (err) {
-    showNotice(err.response?.data?.message || 'Could not change priority', 'error')
-    await load()
+function setPending(ticket, field, value) {
+  const changes = { ...(pending.value[ticket.id] || {}) }
+  const original = {
+    status: ticket.status,
+    priority: ticket.priority,
+    assigned_to: ticket.assigned_to == null ? '' : String(ticket.assigned_to),
+    group_id: ticket.group_id == null ? '' : String(ticket.group_id),
   }
+
+  if (String(original[field]) === String(value)) {
+    delete changes[field]
+  } else {
+    changes[field] = value
+  }
+
+  const next = { ...pending.value }
+  if (Object.keys(changes).length) {
+    next[ticket.id] = changes
+  } else {
+    delete next[ticket.id]
+  }
+  pending.value = next
 }
 
-async function assign(ticket, field, value) {
-  try {
-    await assignTicket(ticket.id, { [field]: value === '' ? null : Number(value) })
-    showNotice(`Ticket #${ticket.id} updated`)
-    await load()
-  } catch (err) {
-    showNotice(err.response?.data?.message || 'Could not assign', 'error')
-    await load()
+function discardPending() {
+  pending.value = {}
+  showNotice('Changes discarded')
+}
+
+async function applyPending() {
+  const entries = Object.entries(pending.value)
+  if (!entries.length) return
+
+  applying.value = true
+  let saved = 0
+  const failures = []
+
+  for (const [id, changes] of entries) {
+    try {
+      if (changes.status) {
+        await updateStatus(id, changes.status, 'Updated from the admin queue')
+        saved += 1
+      }
+      if (changes.priority) {
+        await updatePriority(id, changes.priority)
+        saved += 1
+      }
+      if (changes.assigned_to !== undefined || changes.group_id !== undefined) {
+        const payload = {}
+        if (changes.assigned_to !== undefined) {
+          payload.assigned_to = changes.assigned_to === '' ? null : Number(changes.assigned_to)
+        }
+        if (changes.group_id !== undefined) {
+          payload.group_id = changes.group_id === '' ? null : Number(changes.group_id)
+        }
+        await assignTicket(id, payload)
+        saved += 1
+      }
+    } catch (err) {
+      failures.push(`#${id}: ${err.response?.data?.message || 'failed'}`)
+    }
   }
+
+  pending.value = {}
+  applying.value = false
+
+  if (failures.length) {
+    showNotice(`Saved ${saved} change(s), ${failures.length} failed — ${failures[0]}`, 'error')
+  } else {
+    showNotice(`Saved ${saved} change(s)`)
+  }
+
+  await load()
 }
 
 function openTicket(id) {
   router.push(`/tickets/${id}`)
+}
+
+function isOverdue(ticket) {
+  return (
+    ticket.due_at &&
+    !['resolved', 'closed'].includes(ticket.status) &&
+    new Date(ticket.due_at) < new Date()
+  )
 }
 
 onMounted(() => {
@@ -304,19 +372,38 @@ onMounted(() => {
           Clear filters
         </button>
 
-        <button
-          class="btn btn-ghost btn-small btn-danger btn-icon pager-right"
-          :disabled="!selected.length"
-          @click="deleteSelected"
-        >
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M3 6h18" />
-            <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
-            <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
-            <path d="M10 11v6M14 11v6" />
-          </svg>
-          Delete ({{ selected.length }})
-        </button>
+        <div class="filters-right">
+          <button
+            v-if="pendingCount"
+            class="btn btn-ghost btn-small"
+            type="button"
+            @click="discardPending"
+          >
+            Discard
+          </button>
+          <button
+            class="btn btn-small"
+            type="button"
+            :disabled="!pendingCount || applying"
+            @click="applyPending"
+          >
+            {{ applying ? 'Saving...' : `Apply changes (${pendingCount})` }}
+          </button>
+
+          <button
+            class="btn btn-ghost btn-small btn-danger btn-icon"
+            :disabled="!selected.length"
+            @click="deleteSelected"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M3 6h18" />
+              <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6" />
+              <path d="M10 11v6M14 11v6" />
+            </svg>
+            Delete ({{ selected.length }})
+          </button>
+        </div>
       </div>
 
       <p v-if="notice" :class="notice.type === 'error' ? 'error' : 'notice-ok'">{{ notice.text }}</p>
@@ -325,101 +412,104 @@ onMounted(() => {
       <p v-else-if="!tickets.length" class="muted">No tickets yet.</p>
       <p v-else-if="!filteredTickets.length" class="muted">No tickets match this filter.</p>
 
-      <div v-else class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th class="check-col">
-                <input
-                  type="checkbox"
-                  :checked="allPageSelected"
-                  @change="toggleAll($event.target.checked)"
-                />
-              </th>
-              <th>ID</th>
-              <th>Subject</th>
-              <th>Requester</th>
-              <th>Status</th>
-              <th>Priority</th>
-              <th>Category</th>
-              <th>Assigned to</th>
-              <th>Group</th>
-              <th>Created</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr
-              v-for="ticket in pagedTickets"
-              :key="ticket.id"
-              class="row-link"
-              :class="{ 'row-selected': isSelected(ticket.id) }"
-              @click="openTicket(ticket.id)"
-            >
-              <td class="check-col" @click.stop>
-                <input
-                  type="checkbox"
-                  :checked="isSelected(ticket.id)"
-                  @change="toggleOne(ticket.id, $event.target.checked)"
-                />
-              </td>
-              <td class="mono">#{{ ticket.id }}</td>
-              <td>{{ ticket.subject }}</td>
-              <td>{{ ticket.created_by_name || '#' + ticket.created_by }}</td>
-              <td><StatusBadge :status="ticket.status" /></td>
-              <td @click.stop>
-                <select
-                  class="inline-select priority-select"
-                  :class="'priority-' + ticket.priority"
-                  :value="ticket.priority"
-                  @change="changePriority(ticket, $event.target.value)"
-                >
-                  <option value="low">low</option>
-                  <option value="medium">medium</option>
-                  <option value="high">high</option>
-                </select>
-              </td>
-              <td><CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" /></td>
-              <td @click.stop>
-                <select
-                  class="inline-select"
-                  :value="ticket.assigned_to || ''"
-                  @change="assign(ticket, 'assigned_to', $event.target.value)"
-                >
-                  <option value="">Unassigned</option>
-                  <option v-for="tech in technicians" :key="tech.id" :value="tech.id">
-                    {{ tech.full_name }}
-                  </option>
-                </select>
-              </td>
-              <td @click.stop>
-                <select
-                  class="inline-select"
-                  :value="ticket.group_id || ''"
-                  @change="assign(ticket, 'group_id', $event.target.value)"
-                >
-                  <option value="">No group</option>
-                  <option v-for="group in groups" :key="group.id" :value="group.id">
-                    {{ group.name }}
-                  </option>
-                </select>
-              </td>
-              <td class="muted small">{{ formatDate(ticket.created_at) }}</td>
-              <td @click.stop>
-                <select
-                  class="inline-select"
-                  :value="ticket.status"
-                  @change="changeStatus(ticket, $event.target.value)"
-                >
-                  <option v-for="status in STATUSES" :key="status" :value="status">
-                    {{ STATUS_LABEL[status] }}
-                  </option>
-                </select>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
+      <template v-else>
+        <div class="list-head">
+          <label class="checkbox-row list-check">
+            <input
+              type="checkbox"
+              :checked="allPageSelected"
+              @change="toggleAll($event.target.checked)"
+            />
+            Select all
+          </label>
+        </div>
+
+        <div class="ticket-cards">
+          <div
+            v-for="ticket in pagedTickets"
+            :key="ticket.id"
+            class="ticket-card"
+            :class="{ 'row-selected': isSelected(ticket.id), 'row-dirty': !!pending[ticket.id] }"
+          >
+            <div class="ticket-check" @click.stop>
+              <input
+                type="checkbox"
+                :checked="isSelected(ticket.id)"
+                @change="toggleOne(ticket.id, $event.target.checked)"
+              />
+            </div>
+
+            <div class="ticket-avatar">
+              <img v-if="ticket.created_by_avatar" :src="ticket.created_by_avatar" class="avatar-img" alt="" />
+              <span
+                v-else
+                class="avatar-sm"
+                :class="avatarColor(ticket.created_by_name || String(ticket.created_by))"
+              >
+                {{ initials(ticket.created_by_name) }}
+              </span>
+            </div>
+
+            <div class="ticket-main" @click="openTicket(ticket.id)">
+              <div class="ticket-subject">
+                {{ ticket.subject }}
+                <span class="muted mono small">· {{ ticket.id }}</span>
+              </div>
+              <div class="ticket-meta muted small">
+                <b>{{ ticket.created_by_name || '#' + ticket.created_by }}</b>
+                <span>· Created {{ timeAgo(ticket.created_at) }}</span>
+                <span :class="{ 'due-overdue': isOverdue(ticket) }">· Due {{ formatDate(ticket.due_at) }}</span>
+                <CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" />
+              </div>
+            </div>
+
+            <div class="ticket-controls" @click.stop>
+              <select
+                class="inline-select priority-select"
+                :class="'priority-' + fieldValue(ticket, 'priority', ticket.priority)"
+                :value="fieldValue(ticket, 'priority', ticket.priority)"
+                @change="setPending(ticket, 'priority', $event.target.value)"
+              >
+                <option value="low">low</option>
+                <option value="medium">medium</option>
+                <option value="high">high</option>
+              </select>
+
+              <select
+                class="inline-select"
+                :value="fieldValue(ticket, 'assigned_to', ticket.assigned_to || '')"
+                @change="setPending(ticket, 'assigned_to', $event.target.value)"
+              >
+                <option value="">Unassigned</option>
+                <option v-for="tech in technicians" :key="tech.id" :value="tech.id">
+                  {{ tech.full_name }}
+                </option>
+              </select>
+
+              <select
+                class="inline-select"
+                :value="fieldValue(ticket, 'group_id', ticket.group_id || '')"
+                @change="setPending(ticket, 'group_id', $event.target.value)"
+              >
+                <option value="">No group</option>
+                <option v-for="group in groups" :key="group.id" :value="group.id">
+                  {{ group.name }}
+                </option>
+              </select>
+
+              <select
+                class="inline-select"
+                :value="fieldValue(ticket, 'status', ticket.status)"
+                @change="setPending(ticket, 'status', $event.target.value)"
+              >
+                <option v-for="status in STATUSES" :key="status" :value="status">
+                  {{ STATUS_LABEL[status] }}
+                </option>
+              </select>
+            </div>
+          </div>
+        </div>
+      </template>
 
       <Pagination
         v-model:page="page"

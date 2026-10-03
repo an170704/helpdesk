@@ -2,7 +2,7 @@
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
-import { getTicket, getHistory, getComments, createComment } from '../../api/tickets'
+import { getTicket, getHistory, getComments, createComment, createFeedback } from '../../api/tickets'
 import { getArticles } from '../../api/kb'
 import { PRIORITY_BADGE } from '../../utils/status'
 import { formatDate, timeAgo } from '../../utils/format'
@@ -29,6 +29,44 @@ const sending = ref(false)
 const commentError = ref('')
 
 const isStaff = computed(() => auth.isAdmin || auth.isTechnician)
+
+const canRate = computed(
+  () =>
+    ticket.value &&
+    ticket.value.created_by === auth.user?.id &&
+    ['resolved', 'closed'].includes(ticket.value.status) &&
+    !ticket.value.feedback
+)
+
+const ratingChoice = ref('')
+const ratingComment = ref('')
+const ratingSending = ref(false)
+const ratingError = ref('')
+
+function feedbackBadge(rating) {
+  if (rating === 'positive') return 'badge-green'
+  if (rating === 'negative') return 'badge-red'
+  return 'badge-gray'
+}
+
+async function submitFeedback() {
+  if (!ratingChoice.value) return
+
+  ratingError.value = ''
+  ratingSending.value = true
+
+  try {
+    const feedback = await createFeedback(ticket.value.id, {
+      rating: ratingChoice.value,
+      comment: ratingComment.value.trim() || null,
+    })
+    ticket.value = { ...ticket.value, feedback }
+  } catch (err) {
+    ratingError.value = err.response?.data?.message || 'Could not submit the rating'
+  } finally {
+    ratingSending.value = false
+  }
+}
 
 function initials(name) {
   return (name || '')
@@ -138,7 +176,7 @@ onMounted(() => {
     <p v-else-if="loading" class="muted">Loading...</p>
 
     <template v-else>
-      <h2 class="detail-title">#{{ ticket.id }} — {{ ticket.subject }}</h2>
+      <h2 class="detail-title">Ticket {{ ticket.id }} — {{ ticket.subject }}</h2>
 
       <div class="meta-row">
         <StatusBadge :status="ticket.status" />
@@ -163,6 +201,54 @@ onMounted(() => {
       <p class="muted small">
         Created by {{ ticket.created_by_name || 'user #' + ticket.created_by }} · {{ formatDate(ticket.created_at) }}
       </p>
+
+      <div v-if="canRate" class="rating-card">
+        <h3>Rate your support</h3>
+        <p class="muted small">How was the support for this ticket?</p>
+
+        <div class="rating-buttons">
+          <button
+            class="rating-btn rating-positive"
+            :class="{ active: ratingChoice === 'positive' }"
+            type="button"
+            @click="ratingChoice = 'positive'"
+          >
+            Positive
+          </button>
+          <button
+            class="rating-btn rating-neutral"
+            :class="{ active: ratingChoice === 'neutral' }"
+            type="button"
+            @click="ratingChoice = 'neutral'"
+          >
+            Neutral
+          </button>
+          <button
+            class="rating-btn rating-negative"
+            :class="{ active: ratingChoice === 'negative' }"
+            type="button"
+            @click="ratingChoice = 'negative'"
+          >
+            Negative
+          </button>
+        </div>
+
+        <textarea v-model="ratingComment" rows="2" placeholder="Optional comment..."></textarea>
+
+        <p v-if="ratingError" class="error">{{ ratingError }}</p>
+
+        <button class="btn btn-small" type="button" :disabled="!ratingChoice || ratingSending" @click="submitFeedback">
+          {{ ratingSending ? 'Sending...' : 'Submit rating' }}
+        </button>
+      </div>
+
+      <div v-else-if="ticket.feedback" class="rating-card">
+        <h3>Your rating</h3>
+        <p>
+          <span class="badge" :class="feedbackBadge(ticket.feedback.rating)">{{ ticket.feedback.rating }}</span>
+          <span v-if="ticket.feedback.comment" class="muted"> — "{{ ticket.feedback.comment }}"</span>
+        </p>
+      </div>
 
       <h3>Conversation</h3>
       <p v-if="!comments.length" class="muted">No messages yet. Start the conversation below.</p>

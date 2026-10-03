@@ -12,6 +12,10 @@ export function getUser(id) {
   return api.get(`/users/${id}`).then((res) => res.data.user)
 }
 
+export function getUserOverview(id) {
+  return api.get(`/users/${id}/overview`).then((res) => res.data)
+}
+
 export function createUser(payload) {
   return api.post('/users', payload).then((res) => res.data.user)
 }

@@ -5,8 +5,8 @@ const statsController = require('./stats.controller');
 const router = Router();
 
 router.use(authenticate);
-router.use(requireRole('admin'));
 
-router.get('/', statsController.getStats);
+router.get('/me', requireRole('technician'), statsController.getMyStats);
+router.get('/', requireRole('admin'), statsController.getStats);
 
 module.exports = router;

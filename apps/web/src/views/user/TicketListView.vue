@@ -173,7 +173,7 @@ onMounted(() => {
             class="row-link"
             @click="openTicket(ticket.id)"
           >
-            <td class="mono">#{{ ticket.id }}</td>
+            <td class="mono">{{ ticket.id }}</td>
             <td>{{ ticket.subject }}</td>
             <td><StatusBadge :status="ticket.status" /></td>
             <td><span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ ticket.priority }}</span></td>

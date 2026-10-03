@@ -91,7 +91,7 @@ async function handleSubmit() {
 
     <div v-if="result" class="result-box">
       <p>
-        Ticket <b class="mono">#{{ result.ticket.id }}</b> created
+        Ticket <b class="mono">{{ result.ticket.id }}</b> created
         (<span class="badge" :class="PRIORITY_BADGE[result.ticket.priority]">{{ result.ticket.priority }}</span>)
         — AI classified it as
         <CategoryBadge :category="result.ticket.category_name" :parent="result.ticket.category_parent_name" />

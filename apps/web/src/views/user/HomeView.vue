@@ -148,7 +148,7 @@ onMounted(async () => {
                   class="row-link"
                   @click="router.push(`/tickets/${ticket.id}`)"
                 >
-                  <td class="mono">#{{ ticket.id }}</td>
+                  <td class="mono">{{ ticket.id }}</td>
                   <td>{{ ticket.subject }}</td>
                   <td><StatusBadge :status="ticket.status" /></td>
                   <td class="muted">{{ formatDate(ticket.created_at) }}</td>

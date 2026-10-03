@@ -11,6 +11,7 @@ router.get('/', userController.listUsers);
 router.get('/technicians', userController.listTechnicians);
 router.post('/', userController.createUser);
 router.get('/:id', userController.getUser);
+router.get('/:id/overview', userController.getUserOverview);
 router.patch('/:id', userController.updateUser);
 router.post('/:id/reset-password', userController.resetPassword);
 

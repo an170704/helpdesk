@@ -2,8 +2,10 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getTickets, updateStatus } from '../../api/tickets'
+import { getMyStats } from '../../api/stats'
 import { PRIORITY_BADGE, NEXT_STATUS, NEXT_LABEL } from '../../utils/status'
-import { formatDate } from '../../utils/format'
+import { formatDate, timeAgo } from '../../utils/format'
+import { initials, avatarColor } from '../../utils/avatar'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 import Pagination from '../../components/Pagination.vue'
@@ -12,6 +14,7 @@ const router = useRouter()
 const route = useRoute()
 
 const tickets = ref([])
+const myStats = ref(null)
 const loading = ref(true)
 const error = ref('')
 const notice = ref(null)
@@ -93,6 +96,33 @@ function showNotice(text, type = 'ok') {
   noticeTimer = setTimeout(() => (notice.value = null), 3500)
 }
 
+const tiles = computed(() => {
+  if (!myStats.value) return []
+
+  const { tickets: counts, csat } = myStats.value
+
+  return [
+    { key: 'open', label: 'Assigned', value: counts.open, color: 'tile-total' },
+    { key: 'in_progress', label: 'In progress', value: counts.in_progress, color: 'tile-progress' },
+    { key: 'resolved', label: 'Resolved', value: counts.resolved, color: 'tile-resolved' },
+    { key: 'closed', label: 'Closed', value: counts.closed, color: 'tile-closed' },
+    {
+      key: null,
+      label: 'My satisfaction',
+      value: csat.positivePercent == null ? '—' : `${csat.positivePercent}%`,
+      color: 'tile-sat',
+    },
+  ]
+})
+
+async function loadStats() {
+  try {
+    myStats.value = await getMyStats()
+  } catch {
+    myStats.value = null
+  }
+}
+
 async function load() {
   loading.value = true
   error.value = ''
@@ -110,6 +140,7 @@ async function advance(ticket) {
     await updateStatus(ticket.id, NEXT_STATUS[ticket.status], 'Updated by the technician')
     showNotice(`Ticket #${ticket.id} moved to ${NEXT_STATUS[ticket.status]}`)
     await load()
+    await loadStats()
   } catch (err) {
     showNotice(err.response?.data?.message || 'Could not change status', 'error')
   }
@@ -119,94 +150,124 @@ function openTicket(id) {
   router.push(`/tickets/${id}`)
 }
 
-onMounted(load)
+function isOverdue(ticket) {
+  return (
+    ticket.due_at &&
+    !['resolved', 'closed'].includes(ticket.status) &&
+    new Date(ticket.due_at) < new Date()
+  )
+}
+
+onMounted(() => {
+  load()
+  loadStats()
+})
 </script>
 
 <template>
-  <section class="card">
-    <div class="card-head">
-      <h2>Assigned Tickets</h2>
-      <div class="head-actions">
-        <span class="muted small">{{ filteredTickets.length }} ticket(s)</span>
-        <button class="btn btn-ghost btn-small" :disabled="loading" @click="load">Refresh</button>
+  <div>
+    <div v-if="tiles.length" class="tiles">
+      <button
+        v-for="tile in tiles"
+        :key="tile.label"
+        class="tile"
+        :class="[tile.color, { active: tile.key && statusFilter === tile.key, 'tile-static': !tile.key }]"
+        @click="tile.key && (statusFilter = tile.key)"
+      >
+        <span class="tile-count">{{ tile.value }}</span>
+        <span class="tile-label">{{ tile.label }}</span>
+      </button>
+    </div>
+
+    <section class="card">
+      <div class="card-head">
+        <h2>Assigned Tickets</h2>
+        <div class="head-actions">
+          <span class="muted small">{{ filteredTickets.length }} ticket(s)</span>
+          <button class="btn btn-ghost btn-small" :disabled="loading" @click="load">Refresh</button>
+        </div>
       </div>
-    </div>
 
-    <div class="filters">
-      <select v-model="statusFilter">
-        <option value="all">All statuses</option>
-        <option value="open">Open</option>
-        <option value="pending">Pending</option>
-        <option value="in_progress">In progress</option>
-        <option value="resolved">Resolved</option>
-        <option value="closed">Closed</option>
-      </select>
-      <select v-model="sortOrder">
-        <option value="newest">Newest first</option>
-        <option value="oldest">Oldest first</option>
-      </select>
+      <div class="filters">
+        <select v-model="statusFilter">
+          <option value="all">All statuses</option>
+          <option value="open">Open</option>
+          <option value="pending">Pending</option>
+          <option value="in_progress">In progress</option>
+          <option value="resolved">Resolved</option>
+          <option value="closed">Closed</option>
+        </select>
+        <select v-model="sortOrder">
+          <option value="newest">Newest first</option>
+          <option value="oldest">Oldest first</option>
+        </select>
 
-      <div class="search-box">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-          <circle cx="11" cy="11" r="8" />
-          <path d="m21 21-4.3-4.3" />
-        </svg>
-        <input v-model="searchQuery" type="text" placeholder="Search subject..." />
+        <div class="search-box">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="11" cy="11" r="8" />
+            <path d="m21 21-4.3-4.3" />
+          </svg>
+          <input v-model="searchQuery" type="text" placeholder="Search subject..." />
+        </div>
       </div>
-    </div>
 
-    <p v-if="notice" :class="notice.type === 'error' ? 'error' : 'notice-ok'">{{ notice.text }}</p>
-    <p v-if="error" class="error">{{ error }}</p>
-    <p v-else-if="loading" class="muted">Loading...</p>
-    <p v-else-if="!tickets.length" class="muted">No tickets assigned to you yet.</p>
-    <p v-else-if="!filteredTickets.length" class="muted">No tickets match this filter.</p>
+      <p v-if="notice" :class="notice.type === 'error' ? 'error' : 'notice-ok'">{{ notice.text }}</p>
+      <p v-if="error" class="error">{{ error }}</p>
+      <p v-else-if="loading" class="muted">Loading...</p>
+      <p v-else-if="!tickets.length" class="muted">No tickets assigned to you yet.</p>
+      <p v-else-if="!filteredTickets.length" class="muted">No tickets match this filter.</p>
 
-    <div v-else class="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            <th>ID</th>
-            <th>Subject</th>
-            <th>Requester</th>
-            <th>Status</th>
-            <th>Priority</th>
-            <th>Category</th>
-            <th>Created</th>
-            <th>Actions</th>
-          </tr>
-        </thead>
-        <tbody>
-          <tr
-            v-for="ticket in pagedTickets"
-            :key="ticket.id"
-            class="row-link"
-            @click="openTicket(ticket.id)"
-          >
-            <td class="mono">#{{ ticket.id }}</td>
-            <td>{{ ticket.subject }}</td>
-            <td>{{ ticket.created_by_name || '#' + ticket.created_by }}</td>
-            <td><StatusBadge :status="ticket.status" /></td>
-            <td><span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ ticket.priority }}</span></td>
-            <td><CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" /></td>
-            <td class="muted">{{ formatDate(ticket.created_at) }}</td>
-            <td @click.stop>
-              <button
-                v-if="NEXT_STATUS[ticket.status]"
-                class="btn btn-small"
-                @click="advance(ticket)"
-              >
-                {{ NEXT_LABEL[ticket.status] }}
-              </button>
-            </td>
-          </tr>
-        </tbody>
-      </table>
-    </div>
+      <div v-else class="ticket-cards">
+        <div
+          v-for="ticket in pagedTickets"
+          :key="ticket.id"
+          class="ticket-card"
+        >
+          <div class="ticket-avatar">
+            <img v-if="ticket.created_by_avatar" :src="ticket.created_by_avatar" class="avatar-img" alt="" />
+            <span
+              v-else
+              class="avatar-sm"
+              :class="avatarColor(ticket.created_by_name || String(ticket.created_by))"
+            >
+              {{ initials(ticket.created_by_name) }}
+            </span>
+          </div>
 
-    <Pagination
-      v-model:page="page"
-      v-model:pageSize="pageSize"
-      :total="filteredTickets.length"
-    />
-  </section>
+          <div class="ticket-main" @click="openTicket(ticket.id)">
+            <div class="ticket-subject">
+              {{ ticket.subject }}
+              <span class="muted mono small">· {{ ticket.id }}</span>
+            </div>
+            <div class="ticket-meta muted small">
+              <b>{{ ticket.created_by_name || '#' + ticket.created_by }}</b>
+              <span>· Created {{ timeAgo(ticket.created_at) }}</span>
+              <span :class="{ 'due-overdue': isOverdue(ticket) }">· Due {{ formatDate(ticket.due_at) }}</span>
+              <span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ ticket.priority }}</span>
+              <CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" />
+            </div>
+          </div>
+
+          <div class="ticket-actions" @click.stop>
+            <StatusBadge :status="ticket.status" />
+
+            <button
+              v-if="NEXT_STATUS[ticket.status] && NEXT_STATUS[ticket.status] !== 'closed'"
+              class="btn btn-small"
+              @click="advance(ticket)"
+            >
+              {{ NEXT_LABEL[ticket.status] }}
+            </button>
+            <span v-else-if="ticket.status === 'resolved'" class="muted small">Awaiting admin close</span>
+          </div>
+        </div>
+      </div>
+
+      <Pagination
+        v-model:page="page"
+        v-model:pageSize="pageSize"
+        :total="filteredTickets.length"
+      />
+    </section>
+  </div>
 </template>

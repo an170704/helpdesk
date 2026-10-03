@@ -1,5 +1,6 @@
 const AppError = require('../../utils/AppError');
 const userService = require('./user.service');
+const ticketService = require('../tickets/ticket.service');
 
 const ROLES = ['user', 'technician', 'admin'];
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -57,6 +58,14 @@ async function createUser(req, res) {
   res.status(201).json({ user });
 }
 
+function validateContactFields(body) {
+  for (const field of ['address', 'facebook', 'twitter']) {
+    if (body[field] !== undefined && body[field] !== null && String(body[field]).length > 255) {
+      throw new AppError(400, `${field} must not exceed 255 characters`);
+    }
+  }
+}
+
 async function updateUser(req, res) {
   const { id } = req.params;
   validateId(id);
@@ -78,6 +87,8 @@ async function updateUser(req, res) {
   if (body.phone !== undefined && body.phone !== null && String(body.phone).length > 20) {
     throw new AppError(400, 'phone must not exceed 20 characters');
   }
+
+  validateContactFields(body);
 
   if (Number(id) === req.user.id) {
     if (body.is_active === false) {
@@ -105,9 +116,27 @@ async function resetPassword(req, res) {
   res.json({ message: 'Password reset' });
 }
 
+async function getUserOverview(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  const user = await userService.findById(id);
+  if (!user) {
+    throw new AppError(404, 'User not found');
+  }
+
+  const [stats, recentCreated, recentAssigned] = await Promise.all([
+    userService.getTicketStats(id),
+    ticketService.findRecent({ createdBy: id }),
+    ticketService.findRecent({ assignedTo: id }),
+  ]);
+
+  res.json({ user, stats, recentCreated, recentAssigned });
+}
+
 async function listTechnicians(req, res) {
   const technicians = await userService.findTechnicians();
   res.json({ technicians });
 }
 
-module.exports = { listUsers, getUser, createUser, updateUser, resetPassword, listTechnicians };
+module.exports = { listUsers, getUser, getUserOverview, createUser, updateUser, resetPassword, listTechnicians };

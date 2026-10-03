@@ -31,18 +31,25 @@ const tiles = computed(() => {
   if (!stats.value) return []
 
   const { summary } = stats.value
-  const avg = summary.avg_resolution_hours
 
   return [
-    { label: 'Total tickets', value: summary.total, color: 'tile-total' },
-    { label: 'Open', value: summary.open, color: 'tile-pending' },
+    { label: 'Unresolved', value: summary.unresolved, color: 'tile-total' },
+    { label: 'Due today', value: summary.due_today, color: 'tile-progress' },
+    { label: 'Overdue', value: summary.overdue, color: 'tile-overdue' },
+    { label: 'Open (in progress)', value: summary.open, color: 'tile-pending' },
+    { label: 'Unassigned', value: summary.unassigned, color: 'tile-closed' },
     { label: 'Resolved', value: summary.resolved, color: 'tile-resolved' },
-    { label: 'Closed', value: summary.closed, color: 'tile-closed' },
-    {
-      label: 'Avg resolution',
-      value: avg == null ? '—' : avg >= 24 ? `${(avg / 24).toFixed(1)}d` : `${avg}h`,
-      color: 'tile-progress',
-    },
+  ]
+})
+
+const csatRows = computed(() => {
+  const { csat } = stats.value
+  const total = csat.total || 1
+
+  return [
+    { key: 'positive', label: 'Positive', percent: Math.round((csat.positive / total) * 100), barClass: 'bar-green' },
+    { key: 'neutral', label: 'Neutral', percent: Math.round((csat.neutral / total) * 100), barClass: 'bar-amber' },
+    { key: 'negative', label: 'Negative', percent: Math.round((csat.negative / total) * 100), barClass: 'bar-red' },
   ]
 })
 
@@ -119,6 +126,12 @@ onMounted(async () => {
         </div>
       </div>
 
+      <p class="metric-strip muted small">
+        Avg first response: <b>{{ stats.avgFirstResponseHours ?? '—' }}h</b>
+        · Resolution within SLA: <b>{{ stats.slaPercent ?? '—' }}%</b>
+        · Avg resolution: <b>{{ stats.summary.avg_resolution_hours ?? '—' }}h</b>
+      </p>
+
       <div class="dash-grid">
         <div class="card">
           <h3>Tickets by category</h3>
@@ -152,6 +165,37 @@ onMounted(async () => {
               <b>{{ requester.count }}</b>
             </li>
           </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Unresolved by category</h3>
+            <router-link to="/admin?status=open" class="link">View details</router-link>
+          </div>
+          <p v-if="!stats.unresolvedByCategory.length" class="muted">Nothing open. Great job!</p>
+          <ul v-else class="rank-list">
+            <li v-for="item in stats.unresolvedByCategory" :key="item.name">
+              <span>{{ item.name }}</span>
+              <b>{{ item.count }}</b>
+            </li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h3>Customer satisfaction</h3>
+            <span class="muted small">{{ stats.csat.total }} response(s)</span>
+          </div>
+          <p v-if="!stats.csat.total" class="muted">No ratings yet.</p>
+          <template v-else>
+            <div v-for="row in csatRows" :key="row.key" class="csat-row">
+              <span class="csat-label">{{ row.label }}</span>
+              <div class="bar-track">
+                <div class="bar-fill" :class="row.barClass" :style="{ width: row.percent + '%' }"></div>
+              </div>
+              <span class="csat-value">{{ row.percent }}%</span>
+            </div>
+          </template>
         </div>
       </div>
     </template>

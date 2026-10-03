@@ -1,9 +1,10 @@
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { getUsers, updateUser, resetPassword } from '../../api/users'
 import { formatDate } from '../../utils/format'
+import { initials, avatarColor } from '../../utils/avatar'
 import Pagination from '../../components/Pagination.vue'
 
 const auth = useAuthStore()
@@ -17,6 +18,9 @@ const searchQuery = ref('')
 const roleFilter = ref('all')
 const page = ref(1)
 const pageSize = ref(10)
+
+const menuUser = ref(null)
+const menuPosition = ref({ top: 0, left: 0 })
 
 let noticeTimer = null
 
@@ -62,14 +66,37 @@ async function load() {
   try {
     users.value = await getUsers()
   } catch (err) {
-    error.value = err.response?.data?.message || 'Failed to load users'
+    error.value = err.response?.data?.message || 'Failed to load members'
   } finally {
     loading.value = false
   }
 }
 
+function toggleMenu(user, event) {
+  if (menuUser.value && menuUser.value.id === user.id) {
+    closeMenu()
+    return
+  }
+
+  const rect = event.currentTarget.getBoundingClientRect()
+  menuPosition.value = {
+    top: rect.bottom + 6,
+    left: Math.max(8, rect.right - 180),
+  }
+  menuUser.value = user
+}
+
+function closeMenu() {
+  menuUser.value = null
+}
+
+function onWindowClick() {
+  closeMenu()
+}
+
 async function toggleActive(user) {
   const action = user.is_active ? 'Lock' : 'Unlock'
+  closeMenu()
   if (!window.confirm(`${action} ${user.full_name}?`)) return
 
   try {
@@ -77,11 +104,12 @@ async function toggleActive(user) {
     showNotice(`${user.full_name} has been ${user.is_active ? 'locked' : 'unlocked'}`)
     await load()
   } catch (err) {
-    showNotice(err.response?.data?.message || 'Could not update the user', 'error')
+    showNotice(err.response?.data?.message || 'Could not update the member', 'error')
   }
 }
 
 async function askResetPassword(user) {
+  closeMenu()
   const password = window.prompt(`New password for ${user.full_name} (at least 6 characters):`)
   if (password === null) return
   if (password.length < 6) {
@@ -97,16 +125,28 @@ async function askResetPassword(user) {
   }
 }
 
-onMounted(load)
+function editUser(user) {
+  closeMenu()
+  router.push(`/users/${user.id}/edit`)
+}
+
+onMounted(() => {
+  load()
+  window.addEventListener('click', onWindowClick)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('click', onWindowClick)
+})
 </script>
 
 <template>
   <section class="card">
     <div class="card-head">
-      <h2>Users</h2>
+      <h2>Members</h2>
       <div class="head-actions">
-        <span class="muted small">{{ filteredUsers.length }} account(s)</span>
-        <router-link to="/users/new" class="btn btn-small">Add user</router-link>
+        <span class="muted small">{{ filteredUsers.length }} member(s)</span>
+        <router-link to="/users/new" class="btn btn-small">Add member</router-link>
       </div>
     </div>
 
@@ -130,26 +170,30 @@ onMounted(load)
     <p v-if="notice" :class="notice.type === 'error' ? 'error' : 'notice-ok'">{{ notice.text }}</p>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="loading" class="muted">Loading...</p>
-    <p v-else-if="!filteredUsers.length" class="muted">No users match this filter.</p>
+    <p v-else-if="!filteredUsers.length" class="muted">No members match this filter.</p>
 
     <div v-else class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>ID</th>
-            <th>Name</th>
+            <th>Member</th>
             <th>Email</th>
             <th>Phone</th>
             <th>Role</th>
             <th>Status</th>
             <th>Created</th>
-            <th>Actions</th>
+            <th class="menu-col"></th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="user in pagedUsers" :key="user.id">
-            <td class="mono">#{{ user.id }}</td>
-            <td>{{ user.full_name }}</td>
+          <tr v-for="user in pagedUsers" :key="user.id" class="row-link" @click="router.push(`/users/${user.id}`)">
+            <td>
+              <div class="member-cell">
+                <img v-if="user.avatar_url" :src="user.avatar_url" class="avatar-img" alt="" />
+                <span v-else class="avatar-sm" :class="avatarColor(user.full_name || user.email)">{{ initials(user.full_name) }}</span>
+                <span>{{ user.full_name }}</span>
+              </div>
+            </td>
             <td>{{ user.email }}</td>
             <td class="muted">{{ user.phone || '—' }}</td>
             <td><span class="badge" :class="ROLE_BADGE[user.role]">{{ user.role }}</span></td>
@@ -159,36 +203,14 @@ onMounted(load)
               </span>
             </td>
             <td class="muted small">{{ formatDate(user.created_at) }}</td>
-            <td>
-              <div class="row-actions">
-                <button class="icon-btn" title="Edit" @click="router.push(`/users/${user.id}/edit`)">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M17 3a2.828 2.828 0 1 1 4 4L7.5 20.5 2 22l1.5-5.5L17 3z" />
-                  </svg>
-                </button>
-
-                <button
-                  class="icon-btn"
-                  :title="user.is_active ? 'Lock account' : 'Unlock account'"
-                  :disabled="user.id === auth.user?.id"
-                  @click="toggleActive(user)"
-                >
-                  <svg v-if="user.is_active" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                  </svg>
-                  <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                    <path d="M7 11V7a5 5 0 0 1 9.9-1" />
-                  </svg>
-                </button>
-
-                <button class="icon-btn" title="Reset password" @click="askResetPassword(user)">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-                    <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-                  </svg>
-                </button>
-              </div>
+            <td class="menu-col" @click.stop>
+              <button class="icon-btn" title="Actions" @click.stop="toggleMenu(user, $event)">
+                <svg viewBox="0 0 24 24" fill="currentColor" stroke="none">
+                  <circle cx="12" cy="5" r="1.6" />
+                  <circle cx="12" cy="12" r="1.6" />
+                  <circle cx="12" cy="19" r="1.6" />
+                </svg>
+              </button>
             </td>
           </tr>
         </tbody>
@@ -200,5 +222,24 @@ onMounted(load)
       v-model:pageSize="pageSize"
       :total="filteredUsers.length"
     />
+
+    <Teleport to="body">
+      <div
+        v-if="menuUser"
+        class="row-menu"
+        :style="{ top: menuPosition.top + 'px', left: menuPosition.left + 'px' }"
+        @click.stop
+      >
+        <button class="row-menu-item" @click="editUser(menuUser)">Edit</button>
+        <button
+          class="row-menu-item"
+          :disabled="menuUser.id === auth.user?.id"
+          @click="toggleActive(menuUser)"
+        >
+          {{ menuUser.is_active ? 'Lock account' : 'Unlock account' }}
+        </button>
+        <button class="row-menu-item" @click="askResetPassword(menuUser)">Reset password</button>
+      </div>
+    </Teleport>
   </section>
 </template>

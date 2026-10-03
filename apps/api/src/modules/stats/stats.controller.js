@@ -5,4 +5,9 @@ async function getStats(req, res) {
   res.json({ stats });
 }
 
-module.exports = { getStats };
+async function getMyStats(req, res) {
+  const stats = await statsService.getMyStats(req.user.id);
+  res.json({ stats });
+}
+
+module.exports = { getStats, getMyStats };

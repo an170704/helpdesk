@@ -80,6 +80,12 @@ const routes = [
         meta: { roles: ['admin'] },
       },
       {
+        path: 'users/:id',
+        name: 'member-detail',
+        component: () => import('../views/admin/MemberDetailView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
         path: 'users/:id/edit',
         name: 'user-edit',
         component: () => import('../views/admin/UserFormView.vue'),

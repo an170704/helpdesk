@@ -14,6 +14,9 @@ const isSelf = computed(() => isEdit.value && Number(route.params.id) === auth.u
 const fullName = ref('')
 const email = ref('')
 const phone = ref('')
+const address = ref('')
+const facebook = ref('')
+const twitter = ref('')
 const role = ref('user')
 const password = ref('')
 const isActive = ref(true)
@@ -31,6 +34,9 @@ async function loadUser() {
     fullName.value = user.full_name
     email.value = user.email
     phone.value = user.phone || ''
+    address.value = user.address || ''
+    facebook.value = user.facebook || ''
+    twitter.value = user.twitter || ''
     role.value = user.role
     isActive.value = user.is_active
   } catch (err) {
@@ -64,6 +70,9 @@ async function handleSubmit() {
         full_name: fullName.value.trim(),
         email: email.value.trim(),
         phone: phone.value.trim() || null,
+        address: address.value.trim() || null,
+        facebook: facebook.value.trim() || null,
+        twitter: twitter.value.trim() || null,
         role: role.value,
         is_active: isActive.value,
       })
@@ -89,7 +98,7 @@ onMounted(loadUser)
 
 <template>
   <section class="card form-card">
-    <h2>{{ isEdit ? 'Edit user' : 'Create user' }}</h2>
+    <h2>{{ isEdit ? 'Edit member' : 'Create member' }}</h2>
 
     <p v-if="loading" class="muted">Loading...</p>
 
@@ -102,6 +111,17 @@ onMounted(loadUser)
 
       <label for="phone">Phone (optional)</label>
       <input id="phone" v-model="phone" type="text" placeholder="e.g. 0901234567" />
+
+      <template v-if="isEdit">
+        <label for="address">Address (optional)</label>
+        <input id="address" v-model="address" type="text" placeholder="e.g. 123 Le Loi, District 1, HCMC" />
+
+        <label for="facebook">Facebook (optional)</label>
+        <input id="facebook" v-model="facebook" type="text" placeholder="https://facebook.com/..." />
+
+        <label for="twitter">Twitter (optional)</label>
+        <input id="twitter" v-model="twitter" type="text" placeholder="https://twitter.com/... or @handle" />
+      </template>
 
       <label for="role">Role</label>
       <select id="role" v-model="role" :disabled="isSelf">
@@ -128,7 +148,7 @@ onMounted(loadUser)
 
       <div class="row form-actions">
         <button class="btn" type="submit" :disabled="saving">
-          {{ saving ? 'Saving...' : isEdit ? 'Save changes' : 'Create user' }}
+          {{ saving ? 'Saving...' : isEdit ? 'Save changes' : 'Create member' }}
         </button>
         <button class="btn btn-ghost" type="button" @click="router.back()">Cancel</button>
       </div>

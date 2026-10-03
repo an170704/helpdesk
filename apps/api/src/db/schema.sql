@@ -10,6 +10,9 @@ CREATE TABLE users (
   full_name     VARCHAR(100) NOT NULL,
   phone         VARCHAR(20),
   avatar_url    VARCHAR(255),
+  address       VARCHAR(255),
+  facebook      VARCHAR(255),
+  twitter       VARCHAR(255),
   role          VARCHAR(10) NOT NULL DEFAULT 'user'
                 CHECK (role IN ('user','technician','admin')),
   is_active     BOOLEAN NOT NULL DEFAULT TRUE,
@@ -59,13 +62,15 @@ CREATE TABLE tickets (
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   resolved_at   TIMESTAMPTZ,
-  closed_at     TIMESTAMPTZ
+  closed_at     TIMESTAMPTZ,
+  due_at        TIMESTAMPTZ
 );
 
 CREATE INDEX idx_tickets_status     ON tickets(status);
 CREATE INDEX idx_tickets_created_by ON tickets(created_by);
 CREATE INDEX idx_tickets_assigned_to ON tickets(assigned_to);
 CREATE INDEX idx_tickets_group_id   ON tickets(group_id);
+CREATE INDEX idx_tickets_due_at     ON tickets(due_at);
 
 -- 6. TICKET COMMENTS
 CREATE TABLE ticket_comments (
@@ -134,4 +139,14 @@ CREATE TABLE settings (
   key        VARCHAR(50) PRIMARY KEY,
   value      TEXT,
   updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- 12. CUSTOMER SATISFACTION (one rating per ticket)
+CREATE TABLE ticket_feedback (
+  id         SERIAL PRIMARY KEY,
+  ticket_id  INT NOT NULL UNIQUE REFERENCES tickets(id) ON DELETE CASCADE,
+  rating     VARCHAR(10) NOT NULL CHECK (rating IN ('positive','neutral','negative')),
+  comment    TEXT,
+  created_by INT NOT NULL REFERENCES users(id),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );

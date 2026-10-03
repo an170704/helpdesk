@@ -1,6 +1,7 @@
 const AppError = require('../../utils/AppError');
 const ticketService = require('./ticket.service');
 const { assertCanView } = require('./ticket.access');
+const feedbackService = require('../feedback/feedback.service');
 const { TICKET_STATUSES, TICKET_PRIORITIES } = require('./ticket.constants');
 
 function validateId(id) {
@@ -65,8 +66,11 @@ async function getTicket(req, res) {
   const ticket = await findTicketOrFail(id);
   assertCanView(ticket, req.user);
 
-  const attachments = await ticketService.findAttachments(id);
-  res.json({ ticket: { ...ticket, attachments } });
+  const [attachments, feedback] = await Promise.all([
+    ticketService.findAttachments(id),
+    feedbackService.findByTicket(id),
+  ]);
+  res.json({ ticket: { ...ticket, attachments, feedback } });
 }
 
 async function updateStatus(req, res) {

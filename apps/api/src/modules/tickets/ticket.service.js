@@ -4,7 +4,7 @@ const AppError = require('../../utils/AppError');
 const aiClient = require('../../services/aiClient');
 const categoryService = require('../categories/category.service');
 const notificationService = require('../notifications/notification.service');
-const { ALLOWED_TRANSITIONS } = require('./ticket.constants');
+const { ALLOWED_TRANSITIONS, SLA_HOURS } = require('./ticket.constants');
 
 // Shared SELECT: joins categories, assigned technician, group and creator names
 const TICKET_SELECT = `
@@ -12,7 +12,8 @@ const TICKET_SELECT = `
          cp.name AS category_parent_name,
          au.full_name AS assigned_name,
          gg.name AS group_name,
-         cu.full_name AS created_by_name
+         cu.full_name AS created_by_name,
+         cu.avatar_url AS created_by_avatar
   FROM tickets t
   LEFT JOIN categories c ON c.id = t.category_id
   LEFT JOIN categories cp ON cp.id = c.parent_id
@@ -23,11 +24,13 @@ const TICKET_SELECT = `
 
 async function create({ subject, description, priority, createdBy }) {
   const ticket = await withTransaction(async (client) => {
+    const dueAt = new Date(Date.now() + SLA_HOURS[priority] * 3600000);
+
     const { rows } = await client.query(
-      `INSERT INTO tickets (subject, description, priority, created_by)
-       VALUES ($1, $2, $3, $4)
+      `INSERT INTO tickets (subject, description, priority, created_by, due_at)
+       VALUES ($1, $2, $3, $4, $5)
        RETURNING *`,
-      [subject, description, priority, createdBy]
+      [subject, description, priority, createdBy, dueAt]
     );
     const createdTicket = rows[0];
 
@@ -126,6 +129,10 @@ async function updateStatus({ ticketId, actorId, actorRole, status, note }) {
 
     // Admins may set any status (including reopening); technicians follow the forward-only flow
     if (actorRole !== 'admin') {
+      if (status === 'closed') {
+        throw new AppError(403, 'Only admins can close tickets');
+      }
+
       const allowed = ALLOWED_TRANSITIONS[current.status] || [];
       if (!allowed.includes(status)) {
         throw new AppError(
@@ -188,18 +195,21 @@ async function updatePriority({ ticketId, actorId, priority }) {
       throw new AppError(400, `Priority is already "${priority}"`);
     }
 
+    // Recalculate the SLA deadline from the moment the ticket was created
+    const dueAt = new Date(new Date(current.created_at).getTime() + SLA_HOURS[priority] * 3600000);
+
     const { rows: updatedRows } = await client.query(
       `UPDATE tickets
-       SET priority = $2, updated_at = now()
+       SET priority = $2, due_at = $3, updated_at = now()
        WHERE id = $1
        RETURNING *`,
-      [ticketId, priority]
+      [ticketId, priority, dueAt]
     );
 
     await client.query(
       `INSERT INTO ticket_history (ticket_id, actor_id, action, note)
        VALUES ($1, $2, 'priority_changed', $3)`,
-      [ticketId, actorId, `from ${current.priority} to ${priority}`]
+      [ticketId, actorId, `from ${current.priority} to ${priority} (due date recalculated)`]
     );
 
     return updatedRows[0];
@@ -298,6 +308,17 @@ async function deleteTicket(id) {
   }
 }
 
+async function findRecent({ createdBy, assignedTo, limit = 10 }) {
+  const column = createdBy ? 't.created_by' : 't.assigned_to';
+  const value = createdBy || assignedTo;
+
+  const { rows } = await pool.query(
+    `${TICKET_SELECT} WHERE ${column} = $1 ORDER BY t.created_at DESC LIMIT $2`,
+    [value, limit]
+  );
+  return rows;
+}
+
 async function findHistory(ticketId) {
   const { rows } = await pool.query(
     `SELECT h.id, h.action, h.from_status, h.to_status, h.note, h.created_at,
@@ -332,6 +353,7 @@ module.exports = {
   updatePriority,
   assignTicket,
   deleteTicket,
+  findRecent,
   findHistory,
   findAttachments,
 };

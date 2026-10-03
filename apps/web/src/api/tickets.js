@@ -53,3 +53,7 @@ export function createComment(id, { body, is_internal = false, files = [] }) {
   }
   return api.post(`/tickets/${id}/comments`, formData).then((res) => res.data.comment)
 }
+
+export function createFeedback(id, payload) {
+  return api.post(`/tickets/${id}/feedback`, payload).then((res) => res.data.feedback)
+}

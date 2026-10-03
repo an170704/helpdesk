@@ -34,7 +34,7 @@ const sections = computed(() => {
         title: 'Manage',
         items: [
           { label: 'Knowledge Base', to: '/kb', icon: 'book', soon: true },
-          { label: 'Users', to: '/users', icon: 'users' },
+          { label: 'Members', to: '/users', icon: 'users' },
           { label: 'Categories', to: '/categories', icon: 'tag', soon: true },
           { label: 'Chatbot', to: '/chatbot', icon: 'chat' },
         ],
