@@ -5,6 +5,10 @@ const userController = require('./user.controller');
 const router = Router();
 
 router.use(authenticate);
+
+router.get('/me', userController.getMe);
+router.patch('/me', userController.updateMe);
+
 router.use(requireRole('admin'));
 
 router.get('/', userController.listUsers);

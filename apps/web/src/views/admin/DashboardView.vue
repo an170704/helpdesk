@@ -53,11 +53,11 @@ const csatRows = computed(() => {
   ]
 })
 
-const categoryChart = computed(() => ({
-  labels: stats.value.byCategory.map((c) => c.name),
+const groupChart = computed(() => ({
+  labels: stats.value.byGroup.map((g) => g.name),
   datasets: [
     {
-      data: stats.value.byCategory.map((c) => c.count),
+      data: stats.value.byGroup.map((g) => g.count),
       backgroundColor: CATEGORY_COLORS,
       borderWidth: 2,
       borderColor: '#fff',
@@ -134,9 +134,9 @@ onMounted(async () => {
 
       <div class="dash-grid">
         <div class="card">
-          <h3>Tickets by category</h3>
+          <h3>Tickets by group</h3>
           <div class="chart-box">
-            <Doughnut :data="categoryChart" :options="baseOptions" />
+            <Doughnut :data="groupChart" :options="baseOptions" />
           </div>
         </div>
 

@@ -13,6 +13,8 @@ const kbRoutes = require('./modules/kb/kb.routes');
 const statsRoutes = require('./modules/stats/stats.routes');
 const settingRoutes = require('./modules/settings/setting.routes');
 const feedbackRoutes = require('./modules/feedback/feedback.routes');
+const uploadRoutes = require('./modules/uploads/upload.routes');
+const categoryRoutes = require('./modules/categories/category.routes');
 
 const app = express();
 
@@ -41,6 +43,8 @@ app.use('/api/notifications', notificationRoutes);
 app.use('/api/kb', kbRoutes);
 app.use('/api/stats', statsRoutes);
 app.use('/api/settings', settingRoutes);
+app.use('/api/uploads', uploadRoutes);
+app.use('/api/categories', categoryRoutes);
 
 app.use((req, res) => {
   res.status(404).json({ message: 'Resource not found' });

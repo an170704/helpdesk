@@ -1,48 +1,61 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
-import { useRouter } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
-import { getUsers, updateUser, resetPassword } from '../../api/users'
+import { getUsers, updateUser, resetPassword, createUser } from '../../api/users'
+import { getGroups } from '../../api/groups'
 import { formatDate } from '../../utils/format'
 import { initials, avatarColor } from '../../utils/avatar'
 import Pagination from '../../components/Pagination.vue'
+import SideDrawer from '../../components/SideDrawer.vue'
+import MultiSelect from '../../components/MultiSelect.vue'
 
 const auth = useAuthStore()
+const route = useRoute()
 const router = useRouter()
 
+const isStaffMode = computed(() => route.meta.directory === 'staff')
+const pageTitle = computed(() => (isStaffMode.value ? 'Staff' : 'Members'))
+const addLabel = computed(() => (isStaffMode.value ? 'Add staff' : 'Add member'))
+
 const users = ref([])
+const groups = ref([])
 const loading = ref(true)
 const error = ref('')
 const notice = ref(null)
 const searchQuery = ref('')
-const roleFilter = ref('all')
 const page = ref(1)
 const pageSize = ref(10)
 
 const menuUser = ref(null)
 const menuPosition = ref({ top: 0, left: 0 })
 
+const drawerOpen = ref(false)
+const saving = ref(false)
+const formError = ref('')
+const form = ref({ full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', groupIds: [] })
+
 let noticeTimer = null
 
 const ROLE_BADGE = { admin: 'badge-admin', technician: 'badge-tech', user: 'badge-user' }
 
+const groupOptions = computed(() => groups.value.map((group) => ({ id: group.id, label: group.name })))
+
+const directoryUsers = computed(() =>
+  users.value.filter((u) =>
+    isStaffMode.value ? u.role === 'technician' || u.role === 'admin' : u.role === 'user'
+  )
+)
+
 const filteredUsers = computed(() => {
-  let list = [...users.value]
-
-  if (roleFilter.value !== 'all') {
-    list = list.filter((u) => u.role === roleFilter.value)
-  }
-
   const query = searchQuery.value.trim().toLowerCase()
-  if (query) {
-    list = list.filter(
-      (u) =>
-        u.full_name.toLowerCase().includes(query) ||
-        u.email.toLowerCase().includes(query)
-    )
-  }
+  if (!query) return directoryUsers.value
 
-  return list
+  return directoryUsers.value.filter(
+    (u) =>
+      u.full_name.toLowerCase().includes(query) ||
+      u.email.toLowerCase().includes(query)
+  )
 })
 
 const pagedUsers = computed(() => {
@@ -50,7 +63,7 @@ const pagedUsers = computed(() => {
   return filteredUsers.value.slice(start, start + pageSize.value)
 })
 
-watch([roleFilter, searchQuery], () => {
+watch([searchQuery, () => route.path], () => {
   page.value = 1
 })
 
@@ -66,9 +79,67 @@ async function load() {
   try {
     users.value = await getUsers()
   } catch (err) {
-    error.value = err.response?.data?.message || 'Failed to load members'
+    error.value = err.response?.data?.message || 'Failed to load the directory'
   } finally {
     loading.value = false
+  }
+}
+
+async function loadGroups() {
+  try {
+    groups.value = await getGroups()
+  } catch {
+    groups.value = []
+  }
+}
+
+function openDrawer() {
+  form.value = { full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', groupIds: [] }
+  formError.value = ''
+  drawerOpen.value = true
+}
+
+function closeDrawer() {
+  drawerOpen.value = false
+}
+
+async function submitDrawer() {
+  formError.value = ''
+
+  if (!form.value.full_name.trim()) {
+    formError.value = 'Full name is required'
+    return
+  }
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(form.value.email)) {
+    formError.value = 'Invalid email'
+    return
+  }
+  if (form.value.password.length < 6) {
+    formError.value = 'Password must be at least 6 characters'
+    return
+  }
+
+  const role = isStaffMode.value ? form.value.role : 'user'
+  const groupIds = isStaffMode.value && role === 'technician' ? form.value.groupIds : undefined
+
+  saving.value = true
+  try {
+    await createUser({
+      full_name: form.value.full_name.trim(),
+      email: form.value.email.trim(),
+      phone: form.value.phone.trim() || null,
+      address: form.value.address.trim() || null,
+      role,
+      password: form.value.password,
+      ...(groupIds && { group_ids: groupIds }),
+    })
+    drawerOpen.value = false
+    showNotice(`${isStaffMode.value ? 'Staff member' : 'Member'} "${form.value.full_name.trim()}" created`)
+    await load()
+  } catch (err) {
+    formError.value = err.response?.data?.message || 'Could not create the account'
+  } finally {
+    saving.value = false
   }
 }
 
@@ -104,7 +175,7 @@ async function toggleActive(user) {
     showNotice(`${user.full_name} has been ${user.is_active ? 'locked' : 'unlocked'}`)
     await load()
   } catch (err) {
-    showNotice(err.response?.data?.message || 'Could not update the member', 'error')
+    showNotice(err.response?.data?.message || 'Could not update the account', 'error')
   }
 }
 
@@ -127,11 +198,12 @@ async function askResetPassword(user) {
 
 function editUser(user) {
   closeMenu()
-  router.push(`/users/${user.id}/edit`)
+  router.push(`/users/${user.id}?tab=details`)
 }
 
 onMounted(() => {
   load()
+  if (isStaffMode.value) loadGroups()
   window.addEventListener('click', onWindowClick)
 })
 
@@ -143,21 +215,14 @@ onUnmounted(() => {
 <template>
   <section class="card">
     <div class="card-head">
-      <h2>Members</h2>
+      <h2>{{ pageTitle }}</h2>
       <div class="head-actions">
-        <span class="muted small">{{ filteredUsers.length }} member(s)</span>
-        <router-link to="/users/new" class="btn btn-small">Add member</router-link>
+        <span class="muted small">{{ filteredUsers.length }} account(s)</span>
+        <button class="btn btn-small" @click="openDrawer">{{ addLabel }}</button>
       </div>
     </div>
 
     <div class="filters">
-      <select v-model="roleFilter">
-        <option value="all">All roles</option>
-        <option value="user">User</option>
-        <option value="technician">Technician</option>
-        <option value="admin">Admin</option>
-      </select>
-
       <div class="search-box">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
           <circle cx="11" cy="11" r="8" />
@@ -170,16 +235,16 @@ onUnmounted(() => {
     <p v-if="notice" :class="notice.type === 'error' ? 'error' : 'notice-ok'">{{ notice.text }}</p>
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="loading" class="muted">Loading...</p>
-    <p v-else-if="!filteredUsers.length" class="muted">No members match this filter.</p>
+    <p v-else-if="!filteredUsers.length" class="muted">No accounts match this filter.</p>
 
     <div v-else class="table-wrap">
       <table>
         <thead>
           <tr>
-            <th>Member</th>
+            <th>Name</th>
             <th>Email</th>
             <th>Phone</th>
-            <th>Role</th>
+            <th v-if="isStaffMode">Role</th>
             <th>Status</th>
             <th>Created</th>
             <th class="menu-col"></th>
@@ -196,7 +261,9 @@ onUnmounted(() => {
             </td>
             <td>{{ user.email }}</td>
             <td class="muted">{{ user.phone || '—' }}</td>
-            <td><span class="badge" :class="ROLE_BADGE[user.role]">{{ user.role }}</span></td>
+            <td v-if="isStaffMode">
+              <span class="badge" :class="ROLE_BADGE[user.role]">{{ user.role }}</span>
+            </td>
             <td>
               <span class="badge" :class="user.is_active ? 'badge-green' : 'badge-red'">
                 {{ user.is_active ? 'Active' : 'Locked' }}
@@ -241,5 +308,52 @@ onUnmounted(() => {
         <button class="row-menu-item" @click="askResetPassword(menuUser)">Reset password</button>
       </div>
     </Teleport>
+
+    <SideDrawer :open="drawerOpen" :title="addLabel" @close="closeDrawer">
+      <p class="muted small drawer-hint">Full name and email are mandatory.</p>
+
+      <label for="d-name">Full name *</label>
+      <input id="d-name" v-model="form.full_name" type="text" placeholder="e.g. Nguyen Van B" />
+
+      <label for="d-email">Email *</label>
+      <input id="d-email" v-model="form.email" type="text" placeholder="name@company.com" />
+
+      <label for="d-phone">Phone</label>
+      <input id="d-phone" v-model="form.phone" type="text" placeholder="e.g. 0901234567" />
+
+      <label for="d-address">Address</label>
+      <input id="d-address" v-model="form.address" type="text" placeholder="e.g. 123 Le Loi, District 1" />
+
+      <template v-if="isStaffMode">
+        <label for="d-role">Role *</label>
+        <select id="d-role" v-model="form.role">
+          <option value="technician">Technician</option>
+          <option value="admin">Admin</option>
+        </select>
+      </template>
+
+      <template v-if="isStaffMode && form.role === 'technician'">
+        <label>Groups</label>
+        <p v-if="!groups.length" class="muted small">No groups available.</p>
+        <MultiSelect
+          v-else
+          v-model="form.groupIds"
+          :options="groupOptions"
+          placeholder="Select groups..."
+        />
+      </template>
+
+      <label for="d-password">Initial password *</label>
+      <input id="d-password" v-model="form.password" type="password" placeholder="At least 6 characters" />
+
+      <p v-if="formError" class="error">{{ formError }}</p>
+
+      <template #footer>
+        <button class="btn btn-ghost" type="button" @click="closeDrawer">Cancel</button>
+        <button class="btn" type="button" :disabled="saving" @click="submitDrawer">
+          {{ saving ? 'Creating...' : addLabel }}
+        </button>
+      </template>
+    </SideDrawer>
   </section>
 </template>

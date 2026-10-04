@@ -1,12 +1,15 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getTickets, updateStatus, updatePriority, assignTicket, deleteTicket } from '../../api/tickets'
+import { getTickets, updateStatus, updatePriority, updateCategory, assignTicket, deleteTicket } from '../../api/tickets'
 import { getTechnicians } from '../../api/users'
 import { getGroups } from '../../api/groups'
+import { getCategories } from '../../api/categories'
+import { categoryLabel, categoriesOfGroup } from '../../utils/categories'
 import { STATUS_LABEL } from '../../utils/status'
 import { formatDate, timeAgo } from '../../utils/format'
 import { initials, avatarColor } from '../../utils/avatar'
+import { membersOfGroup, groupsOfTechnician, byFullName } from '../../utils/groups'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 import Pagination from '../../components/Pagination.vue'
 
@@ -16,6 +19,7 @@ const route = useRoute()
 const tickets = ref([])
 const technicians = ref([])
 const groups = ref([])
+const categories = ref([])
 const loading = ref(true)
 const error = ref('')
 const notice = ref(null)
@@ -192,11 +196,18 @@ async function load() {
 
 async function loadOptions() {
   try {
-    technicians.value = await getTechnicians()
-    groups.value = await getGroups()
+    const [techs, grps, cats] = await Promise.all([
+      getTechnicians(),
+      getGroups(),
+      getCategories(),
+    ])
+    technicians.value = techs
+    groups.value = grps
+    categories.value = cats
   } catch {
     technicians.value = []
     groups.value = []
+    categories.value = []
   }
 }
 
@@ -225,6 +236,7 @@ function setPending(ticket, field, value) {
     priority: ticket.priority,
     assigned_to: ticket.assigned_to == null ? '' : String(ticket.assigned_to),
     group_id: ticket.group_id == null ? '' : String(ticket.group_id),
+    category_id: ticket.category_id == null ? '' : String(ticket.category_id),
   }
 
   if (String(original[field]) === String(value)) {
@@ -245,6 +257,89 @@ function setPending(ticket, field, value) {
 function discardPending() {
   pending.value = {}
   showNotice('Changes discarded')
+}
+
+function technicianOptions(ticket) {
+  const groupId = fieldValue(ticket, 'group_id', ticket.group_id || '')
+  if (!groupId) return byFullName(technicians.value)
+
+  const members = byFullName(membersOfGroup(groups.value, groupId))
+  const assigned = fieldValue(ticket, 'assigned_to', ticket.assigned_to || '')
+  if (assigned && !members.some((m) => m.id === Number(assigned))) {
+    const current = technicians.value.find((t) => t.id === Number(assigned))
+    if (current) return [current, ...members]
+  }
+  return members
+}
+
+function groupOptions(ticket) {
+  const assigned = fieldValue(ticket, 'assigned_to', ticket.assigned_to || '')
+  if (!assigned) return groups.value
+
+  const options = groupsOfTechnician(groups.value, assigned)
+  const groupId = fieldValue(ticket, 'group_id', ticket.group_id || '')
+  if (groupId && !options.some((g) => g.id === Number(groupId))) {
+    const current = groups.value.find((g) => g.id === Number(groupId))
+    if (current) return [current, ...options]
+  }
+  return options
+}
+
+function onAssigneeChange(ticket, value) {
+  setPending(ticket, 'assigned_to', value)
+  const groupId = fieldValue(ticket, 'group_id', ticket.group_id || '')
+  if (value && groupId && !groupsOfTechnician(groups.value, value).some((g) => g.id === Number(groupId))) {
+    setPending(ticket, 'group_id', '')
+  }
+}
+
+function assignmentValue(ticket) {
+  const groupId = fieldValue(ticket, 'group_id', ticket.group_id || '')
+  const categoryId = fieldValue(ticket, 'category_id', ticket.category_id || '')
+  if (!groupId && !categoryId) return ''
+  return `${groupId}:${categoryId}`
+}
+
+function assignmentOptions(ticket) {
+  const options = []
+
+  for (const group of groupOptions(ticket)) {
+    options.push({ value: `${group.id}:`, label: group.name })
+    for (const category of categoriesOfGroup(categories.value, group)) {
+      options.push({ value: `${group.id}:${category.id}`, label: `» ${categoryLabel(category, group)}` })
+    }
+  }
+
+  const current = assignmentValue(ticket)
+  if (current && !options.some((opt) => opt.value === current)) {
+    const [groupId, categoryId] = current.split(':')
+    const category = categories.value.find((c) => c.id === Number(categoryId))
+    const group = groups.value.find((g) => g.id === Number(groupId))
+    if (category) {
+      options.unshift({ value: current, label: `» ${categoryLabel(category, group)}` })
+    } else if (group) {
+      options.unshift({ value: current, label: group.name })
+    }
+  }
+
+  return options
+}
+
+function onAssignmentChange(ticket, value) {
+  if (!value) {
+    setPending(ticket, 'group_id', '')
+    setPending(ticket, 'category_id', '')
+    return
+  }
+
+  const [groupId, categoryId] = value.split(':')
+  setPending(ticket, 'group_id', groupId)
+  setPending(ticket, 'category_id', categoryId || '')
+
+  const assigned = fieldValue(ticket, 'assigned_to', ticket.assigned_to || '')
+  if (value && assigned && !membersOfGroup(groups.value, groupId).some((m) => m.id === Number(assigned))) {
+    setPending(ticket, 'assigned_to', '')
+  }
 }
 
 async function applyPending() {
@@ -274,6 +369,10 @@ async function applyPending() {
           payload.group_id = changes.group_id === '' ? null : Number(changes.group_id)
         }
         await assignTicket(id, payload)
+        saved += 1
+      }
+      if (changes.category_id !== undefined) {
+        await updateCategory(id, changes.category_id === '' ? null : Number(changes.category_id))
         saved += 1
       }
     } catch (err) {
@@ -332,6 +431,7 @@ onMounted(() => {
         <h2>Tickets</h2>
         <div class="head-actions">
           <span class="muted small">{{ filteredTickets.length }} / {{ tickets.length }} ticket(s)</span>
+          <router-link to="/admin/tickets/new" class="btn btn-small">New ticket</router-link>
           <button class="btn btn-ghost btn-small" :disabled="loading" @click="load">Refresh</button>
         </div>
       </div>
@@ -470,35 +570,35 @@ onMounted(() => {
                 :value="fieldValue(ticket, 'priority', ticket.priority)"
                 @change="setPending(ticket, 'priority', $event.target.value)"
               >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-                <option value="high">high</option>
+                <option value="low">Low</option>
+                <option value="medium">Medium</option>
+                <option value="high">High</option>
               </select>
 
               <select
-                class="inline-select"
+                class="inline-select tech-select"
                 :value="fieldValue(ticket, 'assigned_to', ticket.assigned_to || '')"
-                @change="setPending(ticket, 'assigned_to', $event.target.value)"
+                @change="onAssigneeChange(ticket, $event.target.value)"
               >
                 <option value="">Unassigned</option>
-                <option v-for="tech in technicians" :key="tech.id" :value="tech.id">
+                <option v-for="tech in technicianOptions(ticket)" :key="tech.id" :value="tech.id">
                   {{ tech.full_name }}
                 </option>
               </select>
 
               <select
-                class="inline-select"
-                :value="fieldValue(ticket, 'group_id', ticket.group_id || '')"
-                @change="setPending(ticket, 'group_id', $event.target.value)"
+                class="inline-select assignment-select"
+                :value="assignmentValue(ticket)"
+                @change="onAssignmentChange(ticket, $event.target.value)"
               >
                 <option value="">No group</option>
-                <option v-for="group in groups" :key="group.id" :value="group.id">
-                  {{ group.name }}
+                <option v-for="opt in assignmentOptions(ticket)" :key="opt.value" :value="opt.value">
+                  {{ opt.label }}
                 </option>
               </select>
 
               <select
-                class="inline-select"
+                class="inline-select status-select"
                 :value="fieldValue(ticket, 'status', ticket.status)"
                 @change="setPending(ticket, 'status', $event.target.value)"
               >

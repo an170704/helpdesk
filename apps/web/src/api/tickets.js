@@ -24,6 +24,12 @@ export function updatePriority(id, priority) {
   return api.patch(`/tickets/${id}/priority`, { priority }).then((res) => res.data.ticket)
 }
 
+export function updateCategory(id, categoryId) {
+  return api
+    .patch(`/tickets/${id}/category`, { category_id: categoryId })
+    .then((res) => res.data.ticket)
+}
+
 export function assignTicket(id, payload) {
   return api.patch(`/tickets/${id}/assign`, payload).then((res) => res.data.ticket)
 }

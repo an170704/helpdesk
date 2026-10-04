@@ -11,8 +11,6 @@ CREATE TABLE users (
   phone         VARCHAR(20),
   avatar_url    VARCHAR(255),
   address       VARCHAR(255),
-  facebook      VARCHAR(255),
-  twitter       VARCHAR(255),
   role          VARCHAR(10) NOT NULL DEFAULT 'user'
                 CHECK (role IN ('user','technician','admin')),
   is_active     BOOLEAN NOT NULL DEFAULT TRUE,
@@ -20,22 +18,27 @@ CREATE TABLE users (
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- 2. CATEGORIES (= SVM labels, hierarchical: parent_id -> subcategories)
-CREATE TABLE categories (
-  id          SERIAL PRIMARY KEY,
-  name        VARCHAR(100) NOT NULL UNIQUE,
-  description TEXT,
-  parent_id   INT REFERENCES categories(id),
-  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
-);
-
--- 3. SUPPORT GROUPS
+-- 2. SUPPORT GROUPS
 CREATE TABLE groups (
   id          SERIAL PRIMARY KEY,
   name        VARCHAR(100) NOT NULL UNIQUE,
   description TEXT,
   created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 3. CATEGORIES (owned by a group; hierarchical: parent_id -> subcategories)
+CREATE TABLE categories (
+  id          SERIAL PRIMARY KEY,
+  name        VARCHAR(100) NOT NULL,
+  description TEXT,
+  parent_id   INT REFERENCES categories(id),
+  group_id    INT REFERENCES groups(id) ON DELETE CASCADE,
+  created_at  TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE UNIQUE INDEX categories_group_name_key
+  ON categories (group_id, name)
+  WHERE group_id IS NOT NULL;
 
 -- 4. GROUP MEMBERS (many-to-many)
 CREATE TABLE group_members (

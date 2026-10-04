@@ -3,6 +3,7 @@ import { onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getArticle } from '../../api/kb'
 import { formatDate } from '../../utils/format'
+import { sanitizeHtml } from '../../utils/sanitize'
 
 const route = useRoute()
 const router = useRouter()
@@ -33,11 +34,11 @@ onMounted(async () => {
       <h2 class="detail-title">{{ article.title }}</h2>
 
       <div class="meta-row">
-        <span v-if="article.category_name" class="badge badge-amber">{{ article.category_name }}</span>
+        <span v-if="article.category_name || article.group_name" class="badge badge-amber">{{ article.category_name || article.group_name }}</span>
         <span class="muted small">Updated {{ formatDate(article.created_at) }}</span>
       </div>
 
-      <p class="faq-content">{{ article.content }}</p>
+      <div class="faq-content" v-html="sanitizeHtml(article.content)"></div>
     </template>
   </section>
 </template>

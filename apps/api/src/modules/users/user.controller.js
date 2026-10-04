@@ -32,7 +32,7 @@ async function getUser(req, res) {
 }
 
 async function createUser(req, res) {
-  const { full_name, email, phone, role, password } = req.body || {};
+  const { full_name, email, phone, address, role, password, group_ids } = req.body || {};
 
   if (!full_name || !full_name.trim()) {
     throw new AppError(400, 'full_name is required');
@@ -47,23 +47,51 @@ async function createUser(req, res) {
     throw new AppError(400, `Password must be at least ${MIN_PASSWORD} characters`);
   }
 
+  validateContactFields(req.body || {});
+
   const user = await userService.create({
     fullName: full_name.trim(),
     email: email.trim(),
     phone: phone || null,
+    address: address || null,
     role,
     password,
+    groupIds: group_ids === undefined ? [] : group_ids,
   });
 
   res.status(201).json({ user });
 }
 
 function validateContactFields(body) {
-  for (const field of ['address', 'facebook', 'twitter']) {
-    if (body[field] !== undefined && body[field] !== null && String(body[field]).length > 255) {
-      throw new AppError(400, `${field} must not exceed 255 characters`);
-    }
+  if (body.address !== undefined && body.address !== null && String(body.address).length > 255) {
+    throw new AppError(400, 'address must not exceed 255 characters');
   }
+}
+
+async function getMe(req, res) {
+  const [user, groups] = await Promise.all([
+    userService.findById(req.user.id),
+    userService.findGroupsForUser(req.user.id),
+  ]);
+  if (!user) {
+    throw new AppError(404, 'User not found');
+  }
+  res.json({ user, groups });
+}
+
+async function updateMe(req, res) {
+  const body = req.body || {};
+
+  if (body.full_name !== undefined && !String(body.full_name).trim()) {
+    throw new AppError(400, 'full_name cannot be empty');
+  }
+  if (body.phone !== undefined && body.phone !== null && String(body.phone).length > 20) {
+    throw new AppError(400, 'phone must not exceed 20 characters');
+  }
+  validateContactFields(body);
+
+  const user = await userService.update(req.user.id, body, undefined);
+  res.json({ user });
 }
 
 async function updateUser(req, res) {
@@ -99,7 +127,7 @@ async function updateUser(req, res) {
     }
   }
 
-  const user = await userService.update(id, body);
+  const user = await userService.update(id, body, body.group_ids);
   res.json({ user });
 }
 
@@ -125,13 +153,14 @@ async function getUserOverview(req, res) {
     throw new AppError(404, 'User not found');
   }
 
-  const [stats, recentCreated, recentAssigned] = await Promise.all([
+  const [stats, groups, recentCreated, recentAssigned] = await Promise.all([
     userService.getTicketStats(id),
+    userService.findGroupsForUser(id),
     ticketService.findRecent({ createdBy: id }),
     ticketService.findRecent({ assignedTo: id }),
   ]);
 
-  res.json({ user, stats, recentCreated, recentAssigned });
+  res.json({ user, stats, groups, recentCreated, recentAssigned });
 }
 
 async function listTechnicians(req, res) {
@@ -139,4 +168,4 @@ async function listTechnicians(req, res) {
   res.json({ technicians });
 }
 
-module.exports = { listUsers, getUser, getUserOverview, createUser, updateUser, resetPassword, listTechnicians };
+module.exports = { listUsers, getUser, getMe, updateMe, getUserOverview, createUser, updateUser, resetPassword, listTechnicians };

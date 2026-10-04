@@ -1,5 +1,13 @@
 import api from './client'
 
+export function getMe() {
+  return api.get('/users/me').then((res) => res.data)
+}
+
+export function updateMe(payload) {
+  return api.patch('/users/me', payload).then((res) => res.data.user)
+}
+
 export function getTechnicians() {
   return api.get('/users/technicians').then((res) => res.data.technicians)
 }

@@ -16,12 +16,17 @@ async function createMany(userIds, { type, ticketId, message }) {
   }
 }
 
-async function notifyAdmins(actorId, { type, ticketId, message }) {
+async function getAdminIds(excludeId) {
   const { rows } = await pool.query(
     `SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE AND id <> $1`,
-    [actorId]
+    [excludeId]
   );
-  await createMany(rows.map((r) => r.id), { type, ticketId, message });
+  return rows.map((r) => r.id);
+}
+
+async function notifyAdmins(actorId, { type, ticketId, message }) {
+  const ids = await getAdminIds(actorId);
+  await createMany(ids, { type, ticketId, message });
 }
 
 async function findForUser(userId) {
@@ -73,4 +78,4 @@ async function removeAll(userId) {
   await pool.query('DELETE FROM notifications WHERE user_id = $1', [userId]);
 }
 
-module.exports = { createMany, notifyAdmins, findForUser, markRead, markAllRead, remove, removeAll };
+module.exports = { createMany, getAdminIds, notifyAdmins, findForUser, markRead, markAllRead, remove, removeAll };

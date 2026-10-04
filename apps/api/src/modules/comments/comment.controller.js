@@ -2,6 +2,7 @@ const AppError = require('../../utils/AppError');
 const ticketService = require('../tickets/ticket.service');
 const { assertCanView } = require('../tickets/ticket.access');
 const notificationService = require('../notifications/notification.service');
+const groupService = require('../groups/group.service');
 const attachmentService = require('../attachments/attachment.service');
 const commentService = require('./comment.service');
 
@@ -20,7 +21,7 @@ async function loadTicket(req) {
     throw new AppError(404, 'Ticket not found');
   }
 
-  assertCanView(ticket, req.user);
+  await assertCanView(ticket, req.user);
   return ticket;
 }
 
@@ -70,10 +71,25 @@ async function createComment(req, res) {
       message: `Internal note on ticket #${ticket.id}: ${ticket.subject}`,
     });
   } else {
-    const recipients = [ticket.created_by, ticket.assigned_to]
-      .filter((userId) => userId && userId !== req.user.id);
+    const recipients = new Set(
+      [ticket.created_by, ticket.assigned_to].filter(
+        (userId) => userId && userId !== req.user.id
+      )
+    );
 
-    await notificationService.createMany(recipients, {
+    if (!ticket.assigned_to && ticket.group_id) {
+      // Unassigned but routed to a group: notify the technicians of that group
+      const memberIds = await groupService.findMemberIds(ticket.group_id);
+      for (const memberId of memberIds) {
+        if (memberId !== req.user.id) recipients.add(memberId);
+      }
+    } else if (!ticket.assigned_to) {
+      // Nobody is working on it and no group routes it: notify the admins
+      const adminIds = await notificationService.getAdminIds(req.user.id);
+      for (const adminId of adminIds) recipients.add(adminId);
+    }
+
+    await notificationService.createMany([...recipients], {
       type: 'comment',
       ticketId: ticket.id,
       message: `New reply on ticket #${ticket.id}: ${ticket.subject}`,

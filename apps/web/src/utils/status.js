@@ -18,6 +18,12 @@ export const PRIORITY_BADGE = {
   high: 'badge-red',
 }
 
+export const PRIORITY_LABEL = {
+  low: 'Low',
+  medium: 'Medium',
+  high: 'High',
+}
+
 export const NEXT_STATUS = {
   pending: 'in_progress',
   in_progress: 'resolved',

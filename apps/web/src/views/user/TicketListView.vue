@@ -2,7 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getTickets } from '../../api/tickets'
-import { PRIORITY_BADGE } from '../../utils/status'
+import { PRIORITY_BADGE, PRIORITY_LABEL } from '../../utils/status'
 import { formatDate } from '../../utils/format'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
@@ -162,7 +162,7 @@ onMounted(() => {
             <th>Subject</th>
             <th>Status</th>
             <th>Priority</th>
-            <th>Category (AI)</th>
+            <th>Category</th>
             <th>Created</th>
           </tr>
         </thead>
@@ -176,7 +176,7 @@ onMounted(() => {
             <td class="mono">{{ ticket.id }}</td>
             <td>{{ ticket.subject }}</td>
             <td><StatusBadge :status="ticket.status" /></td>
-            <td><span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ ticket.priority }}</span></td>
+            <td><span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ PRIORITY_LABEL[ticket.priority] }}</span></td>
             <td><CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" /></td>
             <td class="muted">{{ formatDate(ticket.created_at) }}</td>
           </tr>

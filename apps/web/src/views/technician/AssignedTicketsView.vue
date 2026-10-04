@@ -3,7 +3,7 @@ import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { getTickets, updateStatus } from '../../api/tickets'
 import { getMyStats } from '../../api/stats'
-import { PRIORITY_BADGE, NEXT_STATUS, NEXT_LABEL } from '../../utils/status'
+import { PRIORITY_BADGE, PRIORITY_LABEL, NEXT_STATUS, NEXT_LABEL } from '../../utils/status'
 import { formatDate, timeAgo } from '../../utils/format'
 import { initials, avatarColor } from '../../utils/avatar'
 import StatusBadge from '../../components/StatusBadge.vue'
@@ -243,7 +243,9 @@ onMounted(() => {
               <b>{{ ticket.created_by_name || '#' + ticket.created_by }}</b>
               <span>· Created {{ timeAgo(ticket.created_at) }}</span>
               <span :class="{ 'due-overdue': isOverdue(ticket) }">· Due {{ formatDate(ticket.due_at) }}</span>
-              <span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ ticket.priority }}</span>
+              <span v-if="ticket.group_name" class="badge badge-blue">{{ ticket.group_name }}</span>
+              <span v-if="ticket.assigned_name" class="muted">→ {{ ticket.assigned_name }}</span>
+              <span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ PRIORITY_LABEL[ticket.priority] }}</span>
               <CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" />
             </div>
           </div>

@@ -1,13 +1,29 @@
+const pool = require('../../config/db');
 const AppError = require('../../utils/AppError');
 
-function assertCanView(ticket, user) {
-  const isOwner = ticket.created_by === user.id;
-  const isAdmin = user.role === 'admin';
-  const isAssignedTech = user.role === 'technician' && ticket.assigned_to === user.id;
-
-  if (!isOwner && !isAdmin && !isAssignedTech) {
-    throw new AppError(403, 'You do not have permission to view this ticket');
-  }
+async function isInGroup(userId, groupId) {
+  const { rows } = await pool.query(
+    'SELECT 1 FROM group_members WHERE group_id = $1 AND user_id = $2',
+    [groupId, userId]
+  );
+  return rows.length > 0;
 }
 
-module.exports = { assertCanView };
+async function assertCanView(ticket, user) {
+  if (ticket.created_by === user.id || user.role === 'admin') {
+    return;
+  }
+
+  if (user.role === 'technician') {
+    if (ticket.assigned_to === user.id) {
+      return;
+    }
+    if (!ticket.assigned_to && ticket.group_id && (await isInGroup(user.id, ticket.group_id))) {
+      return;
+    }
+  }
+
+  throw new AppError(403, 'You do not have permission to view this ticket');
+}
+
+module.exports = { assertCanView, isInGroup };

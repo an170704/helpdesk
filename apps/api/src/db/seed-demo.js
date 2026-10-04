@@ -64,8 +64,8 @@ const PARENT_BY_CATEGORY = {
   Other: 'Other',
 };
 
-const GROUP_BY_PARENT = { Network: 'Network Team', Hardware: 'Hardware Team', Software: 'General Team', Account: 'General Team' };
-const TECH_BY_PARENT = { Network: 'tech1@company.com', Hardware: 'tech1@company.com', Software: 'tech2@company.com', Account: 'tech2@company.com' };
+const GROUP_BY_PARENT = { Network: 'Network', Hardware: 'Hardware', Software: 'Software', Account: 'Account', Other: 'General' };
+const TECH_BY_PARENT = { Network: 'tech1@company.com', Hardware: 'tech1@company.com', Software: 'tech2@company.com', Account: 'tech2@company.com', Other: 'tech2@company.com' };
 
 function randomInt(min, max) {
   return Math.floor(Math.random() * (max - min + 1)) + min;

@@ -1,11 +1,12 @@
 <script setup>
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { getTicket, getHistory, getComments, createComment, createFeedback } from '../../api/tickets'
 import { getArticles } from '../../api/kb'
-import { PRIORITY_BADGE } from '../../utils/status'
+import { PRIORITY_BADGE, PRIORITY_LABEL } from '../../utils/status'
 import { formatDate, timeAgo } from '../../utils/format'
+import { sanitizeHtml } from '../../utils/sanitize'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 
@@ -162,10 +163,26 @@ async function submitComment() {
   }
 }
 
+async function refreshComments() {
+  if (!ticket.value || sending.value) return
+  try {
+    comments.value = await getComments(ticket.value.id)
+  } catch {
+    /* keep the current comments on failure */
+  }
+}
+
+let commentsTimer = null
+
 onMounted(() => {
   load()
   if (isStaff.value) loadKb()
+  commentsTimer = setInterval(() => {
+    if (!document.hidden && ticket.value) refreshComments()
+  }, 20000)
 })
+
+onUnmounted(() => clearInterval(commentsTimer))
 </script>
 
 <template>
@@ -180,11 +197,17 @@ onMounted(() => {
 
       <div class="meta-row">
         <StatusBadge :status="ticket.status" />
-        <span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ ticket.priority }}</span>
+        <span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ PRIORITY_LABEL[ticket.priority] }}</span>
         <CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" />
       </div>
 
-      <p class="description">{{ ticket.description }}</p>
+      <p v-if="ticket.assigned_name || ticket.group_name" class="muted small">
+        <template v-if="ticket.assigned_name">Assigned to <b>{{ ticket.assigned_name }}</b></template>
+        <template v-if="ticket.assigned_name && ticket.group_name"> · </template>
+        <template v-if="ticket.group_name">Group: <b>{{ ticket.group_name }}</b></template>
+      </p>
+
+      <div class="description" v-html="sanitizeHtml(ticket.description)"></div>
 
       <div v-if="ticket.attachments && ticket.attachments.length" class="attachments">
         <h3>Attachments</h3>
@@ -250,7 +273,10 @@ onMounted(() => {
         </p>
       </div>
 
-      <h3>Conversation</h3>
+      <div class="card-head">
+        <h3>Conversation</h3>
+        <button class="btn btn-ghost btn-small" type="button" @click="refreshComments">Refresh</button>
+      </div>
       <p v-if="!comments.length" class="muted">No messages yet. Start the conversation below.</p>
 
       <div v-else class="comments">

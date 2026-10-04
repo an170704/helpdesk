@@ -1,9 +1,8 @@
 const pool = require('../../config/db');
 const withTransaction = require('../../utils/withTransaction');
 const AppError = require('../../utils/AppError');
-const aiClient = require('../../services/aiClient');
-const categoryService = require('../categories/category.service');
 const notificationService = require('../notifications/notification.service');
+const groupService = require('../groups/group.service');
 const { ALLOWED_TRANSITIONS, SLA_HOURS } = require('./ticket.constants');
 
 // Shared SELECT: joins categories, assigned technician, group and creator names
@@ -22,62 +21,66 @@ const TICKET_SELECT = `
   LEFT JOIN users cu ON cu.id = t.created_by
 `;
 
-async function create({ subject, description, priority, createdBy }) {
+async function create({
+  subject,
+  description,
+  priority,
+  status = 'pending',
+  assignedTo = null,
+  groupId = null,
+  categoryId = null,
+  createdBy,
+  actorId,
+}) {
+  const actor = actorId == null ? createdBy : actorId;
+
   const ticket = await withTransaction(async (client) => {
     const dueAt = new Date(Date.now() + SLA_HOURS[priority] * 3600000);
+    const finishedAt = new Date();
+    const resolvedAt = status === 'resolved' || status === 'closed' ? finishedAt : null;
+    const closedAt = status === 'closed' ? finishedAt : null;
 
     const { rows } = await client.query(
-      `INSERT INTO tickets (subject, description, priority, created_by, due_at)
-       VALUES ($1, $2, $3, $4, $5)
+      `INSERT INTO tickets
+         (subject, description, priority, status, assigned_to, group_id, category_id, created_by, due_at, resolved_at, closed_at)
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
        RETURNING *`,
-      [subject, description, priority, createdBy, dueAt]
+      [subject, description, priority, status, assignedTo, groupId, categoryId, createdBy, dueAt, resolvedAt, closedAt]
     );
     const createdTicket = rows[0];
 
     await client.query(
       `INSERT INTO ticket_history (ticket_id, actor_id, action, to_status)
        VALUES ($1, $2, 'created', $3)`,
-      [createdTicket.id, createdBy, createdTicket.status]
+      [createdTicket.id, actor, createdTicket.status]
     );
 
     return createdTicket;
   });
 
-  await notificationService.notifyAdmins(createdBy, {
+  await notificationService.notifyAdmins(actor, {
     type: 'ticket_created',
     ticketId: ticket.id,
     message: `New ticket #${ticket.id}: ${ticket.subject}`,
   });
 
-  return await classify(ticket);
-}
-
-// Calls the AI service and stores category_id + confidence on the ticket.
-// If the AI service fails, the ticket is still returned (category stays null).
-async function classify(ticket) {
-  try {
-    const { category, confidence } = await aiClient.predictCategory({
-      subject: ticket.subject,
-      description: ticket.description,
+  if (createdBy !== actor) {
+    await notificationService.createMany([createdBy], {
+      type: 'ticket_created',
+      ticketId: ticket.id,
+      message: `A ticket was created on your behalf: #${ticket.id} ${ticket.subject}`,
     });
-
-    const categoryId = await categoryService.findIdByName(category);
-    if (!categoryId) {
-      return ticket;
-    }
-
-    await pool.query(
-      `UPDATE tickets
-       SET category_id = $2, confidence = $3, updated_at = now()
-       WHERE id = $1`,
-      [ticket.id, categoryId, confidence]
-    );
-
-    return await findById(ticket.id);
-  } catch (err) {
-    console.error('AI classification failed:', err.message);
-    return ticket;
   }
+
+  if (assignedTo && assignedTo !== actor) {
+    await notificationService.createMany([assignedTo], {
+      type: 'assigned',
+      ticketId: ticket.id,
+      message: `Ticket #${ticket.id} was assigned to you: ${ticket.subject}`,
+    });
+  }
+
+  return await findById(ticket.id);
 }
 
 async function findById(id) {
@@ -105,7 +108,12 @@ async function findAllByUser(userId) {
 
 async function findAllForTechnician(userId) {
   const { rows } = await pool.query(
-    `${TICKET_SELECT} WHERE t.assigned_to = $1 OR t.created_by = $1 ORDER BY t.created_at DESC`,
+    `${TICKET_SELECT}
+     WHERE t.assigned_to = $1
+        OR t.created_by = $1
+        OR (t.group_id IN (SELECT group_id FROM group_members WHERE user_id = $1)
+            AND t.assigned_to IS NULL)
+     ORDER BY t.created_at DESC`,
     [userId]
   );
   return rows;
@@ -218,6 +226,55 @@ async function updatePriority({ ticketId, actorId, priority }) {
   return findById(ticket.id);
 }
 
+async function updateCategory({ ticketId, actorId, categoryId }) {
+  const ticket = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      'SELECT * FROM tickets WHERE id = $1 FOR UPDATE',
+      [ticketId]
+    );
+    const current = rows[0];
+
+    if (!current) {
+      throw new AppError(404, 'Ticket not found');
+    }
+
+    let categoryLabel = 'category removed';
+    if (categoryId != null) {
+      const cat = (
+        await client.query(
+          `SELECT c.name, p.name AS parent_name
+           FROM categories c
+           LEFT JOIN categories p ON p.id = c.parent_id
+           WHERE c.id = $1`,
+          [categoryId]
+        )
+      ).rows[0];
+
+      if (!cat) {
+        throw new AppError(404, 'Category not found');
+      }
+      categoryLabel = `category: ${cat.parent_name ? `${cat.parent_name} > ${cat.name}` : cat.name}`;
+    }
+
+    await client.query(
+      `UPDATE tickets
+       SET category_id = $2, updated_at = now()
+       WHERE id = $1`,
+      [ticketId, categoryId]
+    );
+
+    await client.query(
+      `INSERT INTO ticket_history (ticket_id, actor_id, action, note)
+       VALUES ($1, $2, 'category_changed', $3)`,
+      [ticketId, actorId, categoryLabel]
+    );
+
+    return current;
+  });
+
+  return findById(ticket.id);
+}
+
 async function assignTicket({ ticketId, actorId, assignedTo, groupId }) {
   const ticket = await withTransaction(async (client) => {
     const { rows } = await client.query(
@@ -298,6 +355,19 @@ async function assignTicket({ ticketId, actorId, assignedTo, groupId }) {
     });
   }
 
+  if (groupId !== undefined && updated.group_id && !updated.assigned_to) {
+    // Routed to a group without an individual assignee: notify that group's technicians
+    const memberIds = await groupService.findMemberIds(updated.group_id);
+    await notificationService.createMany(
+      memberIds.filter((id) => id !== actorId),
+      {
+        type: 'assigned',
+        ticketId: updated.id,
+        message: `Ticket #${updated.id} was assigned to your group: ${updated.subject}`,
+      }
+    );
+  }
+
   return updated;
 }
 
@@ -351,6 +421,7 @@ module.exports = {
   findAllForTechnician,
   updateStatus,
   updatePriority,
+  updateCategory,
   assignTicket,
   deleteTicket,
   findRecent,

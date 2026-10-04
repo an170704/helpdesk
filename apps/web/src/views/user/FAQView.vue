@@ -48,7 +48,7 @@ onMounted(async () => {
       <li v-for="article in filteredArticles" :key="article.id">
         <router-link :to="`/faq/${article.id}`" class="faq-link">
           <span>{{ article.title }}</span>
-          <span v-if="article.category_name" class="badge badge-amber">{{ article.category_name }}</span>
+          <span v-if="article.category_name || article.group_name" class="badge badge-amber">{{ article.category_name || article.group_name }}</span>
         </router-link>
       </li>
     </ul>

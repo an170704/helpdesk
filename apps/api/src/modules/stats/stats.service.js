@@ -16,6 +16,7 @@ async function getStats() {
     summaryResult,
     statusResult,
     categoryResult,
+    groupResult,
     priorityResult,
     monthResult,
     techResult,
@@ -44,6 +45,12 @@ async function getStats() {
        FROM tickets t
        LEFT JOIN categories c ON c.id = t.category_id
        LEFT JOIN categories p ON p.id = c.parent_id
+       GROUP BY 1 ORDER BY 2 DESC`
+    ),
+    pool.query(
+      `SELECT COALESCE(g.name, 'No group') AS name, count(*)::int AS count
+       FROM tickets t
+       LEFT JOIN groups g ON g.id = t.group_id
        GROUP BY 1 ORDER BY 2 DESC`
     ),
     pool.query(`SELECT priority, count(*)::int AS count FROM tickets GROUP BY priority`),
@@ -119,6 +126,7 @@ async function getStats() {
     unresolvedByCategory: unresolvedCategoryResult.rows,
     byStatus: statusResult.rows,
     byCategory: categoryResult.rows,
+    byGroup: groupResult.rows,
     byPriority: priorityResult.rows,
     byMonth,
     byTechnician: techResult.rows,

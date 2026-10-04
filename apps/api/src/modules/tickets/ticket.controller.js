@@ -1,7 +1,10 @@
 const AppError = require('../../utils/AppError');
 const ticketService = require('./ticket.service');
-const { assertCanView } = require('./ticket.access');
+const { assertCanView, isInGroup } = require('./ticket.access');
 const feedbackService = require('../feedback/feedback.service');
+const userService = require('../users/user.service');
+const groupService = require('../groups/group.service');
+const categoryService = require('../categories/category.service');
 const { TICKET_STATUSES, TICKET_PRIORITIES } = require('./ticket.constants');
 
 function validateId(id) {
@@ -20,13 +23,17 @@ async function findTicketOrFail(id) {
 
 async function createTicket(req, res) {
   const subject = (req.body.subject || '').trim();
-  const description = (req.body.description || '').trim();
+  const description = String(req.body.description || '').trim();
+  const descriptionText = description.replace(/<[^>]*>/g, ' ').replace(/&nbsp;/g, ' ').trim();
 
-  if (!subject || !description) {
+  if (!subject || !descriptionText) {
     throw new AppError(400, 'subject and description are required');
   }
   if (subject.length > 255) {
     throw new AppError(400, 'subject must not exceed 255 characters');
+  }
+  if (description.length > 20000) {
+    throw new AppError(400, 'description is too long');
   }
 
   const priority = req.body.priority || 'medium';
@@ -34,11 +41,86 @@ async function createTicket(req, res) {
     throw new AppError(400, 'Invalid priority');
   }
 
+  // Admins may create tickets on behalf of another member
+  let createdBy = req.user.id;
+  if (req.body.created_by != null) {
+    if (req.user.role !== 'admin') {
+      throw new AppError(403, 'Only admins can create tickets for other users');
+    }
+    const value = String(req.body.created_by);
+    if (!/^\d+$/.test(value)) {
+      throw new AppError(400, 'Invalid created_by');
+    }
+    const requester = await userService.findById(value);
+    if (!requester) {
+      throw new AppError(404, 'Requester not found');
+    }
+    createdBy = requester.id;
+  }
+
+  const status = req.body.status || 'pending';
+  if (!TICKET_STATUSES.includes(status)) {
+    throw new AppError(400, 'Invalid status');
+  }
+
+  let assignedTo = null;
+  if (req.body.assigned_to != null && req.body.assigned_to !== '') {
+    if (req.user.role !== 'admin') {
+      throw new AppError(403, 'Only admins can assign tickets on creation');
+    }
+    const value = String(req.body.assigned_to);
+    if (!/^\d+$/.test(value)) {
+      throw new AppError(400, 'Invalid assigned_to');
+    }
+    const technician = await userService.findById(value);
+    if (!technician) {
+      throw new AppError(404, 'Technician not found');
+    }
+    if (technician.role !== 'technician') {
+      throw new AppError(400, 'assigned_to must be a technician');
+    }
+    assignedTo = technician.id;
+  }
+
+  let groupId = null;
+  if (req.body.group_id != null && req.body.group_id !== '') {
+    const value = String(req.body.group_id);
+    if (!/^\d+$/.test(value)) {
+      throw new AppError(400, 'Invalid group_id');
+    }
+    const group = await groupService.findById(value);
+    if (!group) {
+      throw new AppError(404, 'Group not found');
+    }
+    groupId = group.id;
+  }
+
+  let categoryId = null;
+  if (req.body.category_id != null && req.body.category_id !== '') {
+    const value = String(req.body.category_id);
+    if (!/^\d+$/.test(value)) {
+      throw new AppError(400, 'Invalid category_id');
+    }
+    const category = await categoryService.findById(value);
+    if (!category) {
+      throw new AppError(404, 'Category not found');
+    }
+    categoryId = category.id;
+    if (groupId == null && category.group_id != null) {
+      groupId = category.group_id;
+    }
+  }
+
   const ticket = await ticketService.create({
     subject,
     description,
     priority,
-    createdBy: req.user.id,
+    status,
+    assignedTo,
+    groupId,
+    categoryId,
+    createdBy,
+    actorId: req.user.id,
   });
 
   res.status(201).json({ ticket });
@@ -64,7 +146,7 @@ async function getTicket(req, res) {
   validateId(id);
 
   const ticket = await findTicketOrFail(id);
-  assertCanView(ticket, req.user);
+  await assertCanView(ticket, req.user);
 
   const [attachments, feedback] = await Promise.all([
     ticketService.findAttachments(id),
@@ -84,8 +166,14 @@ async function updateStatus(req, res) {
 
   if (req.user.role === 'technician') {
     const ticket = await findTicketOrFail(id);
-    if (ticket.assigned_to !== req.user.id) {
-      throw new AppError(403, 'You can only update tickets assigned to you');
+    const isAssignee = ticket.assigned_to === req.user.id;
+    const canTakeFromGroup =
+      !ticket.assigned_to &&
+      ticket.group_id &&
+      (await isInGroup(req.user.id, ticket.group_id));
+
+    if (!isAssignee && !canTakeFromGroup) {
+      throw new AppError(403, 'You can only update tickets assigned to you or your groups');
     }
   }
 
@@ -113,6 +201,29 @@ async function updatePriority(req, res) {
     ticketId: id,
     actorId: req.user.id,
     priority,
+  });
+
+  res.json({ ticket });
+}
+
+async function updateCategory(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  const body = req.body || {};
+  if (!Object.prototype.hasOwnProperty.call(body, 'category_id')) {
+    throw new AppError(400, 'Provide category_id (or null to clear)');
+  }
+
+  const raw = body.category_id;
+  if (raw != null && !/^\d+$/.test(String(raw))) {
+    throw new AppError(400, 'Invalid category_id');
+  }
+
+  const ticket = await ticketService.updateCategory({
+    ticketId: id,
+    actorId: req.user.id,
+    categoryId: raw == null ? null : Number(raw),
   });
 
   res.json({ ticket });
@@ -162,7 +273,7 @@ async function listHistory(req, res) {
   validateId(id);
 
   const ticket = await findTicketOrFail(id);
-  assertCanView(ticket, req.user);
+  await assertCanView(ticket, req.user);
 
   const history = await ticketService.findHistory(id);
   res.json({ history });
@@ -174,6 +285,7 @@ module.exports = {
   getTicket,
   updateStatus,
   updatePriority,
+  updateCategory,
   assignTicket,
   deleteTicket,
   listHistory,

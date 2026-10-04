@@ -14,6 +14,11 @@ const routes = [
     meta: { requiresAuth: true },
     children: [
       {
+        path: 'profile',
+        name: 'profile',
+        component: () => import('../views/user/ProfileView.vue'),
+      },
+      {
         path: 'home',
         name: 'home',
         component: () => import('../views/user/HomeView.vue'),
@@ -44,6 +49,24 @@ const routes = [
         component: () => import('../views/user/FAQArticleView.vue'),
       },
       {
+        path: 'kb',
+        name: 'kb-list',
+        component: () => import('../views/admin/KbListView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'kb/new',
+        name: 'kb-create',
+        component: () => import('../views/admin/KbFormView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'kb/:id/edit',
+        name: 'kb-edit',
+        component: () => import('../views/admin/KbFormView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
         path: 'admin',
         name: 'admin-queue',
         component: () => import('../views/admin/AdminQueueView.vue'),
@@ -53,6 +76,12 @@ const routes = [
         path: 'dashboard',
         name: 'dashboard',
         component: () => import('../views/admin/DashboardView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'admin/tickets/new',
+        name: 'admin-ticket-create',
+        component: () => import('../views/admin/AdminCreateTicketView.vue'),
         meta: { roles: ['admin'] },
       },
       {
@@ -71,24 +100,30 @@ const routes = [
         path: 'users',
         name: 'users',
         component: () => import('../views/admin/UserListView.vue'),
+        meta: { roles: ['admin'], directory: 'members' },
+      },
+      {
+        path: 'staff',
+        name: 'staff',
+        component: () => import('../views/admin/UserListView.vue'),
+        meta: { roles: ['admin'], directory: 'staff' },
+      },
+      {
+        path: 'groups',
+        name: 'groups',
+        component: () => import('../views/admin/GroupListView.vue'),
         meta: { roles: ['admin'] },
       },
       {
-        path: 'users/new',
-        name: 'user-create',
-        component: () => import('../views/admin/UserFormView.vue'),
+        path: 'groups/:id',
+        name: 'group-detail',
+        component: () => import('../views/admin/GroupDetailView.vue'),
         meta: { roles: ['admin'] },
       },
       {
         path: 'users/:id',
         name: 'member-detail',
         component: () => import('../views/admin/MemberDetailView.vue'),
-        meta: { roles: ['admin'] },
-      },
-      {
-        path: 'users/:id/edit',
-        name: 'user-edit',
-        component: () => import('../views/admin/UserFormView.vue'),
         meta: { roles: ['admin'] },
       },
     ],

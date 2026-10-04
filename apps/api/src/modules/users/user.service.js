@@ -1,5 +1,6 @@
 const bcrypt = require('bcryptjs');
 const pool = require('../../config/db');
+const withTransaction = require('../../utils/withTransaction');
 const AppError = require('../../utils/AppError');
 
 async function findAll({ role, search } = {}) {
@@ -18,7 +19,7 @@ async function findAll({ role, search } = {}) {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const { rows } = await pool.query(
-    `SELECT id, full_name, email, phone, role, is_active, avatar_url, address, facebook, twitter, created_at
+    `SELECT id, full_name, email, phone, role, is_active, avatar_url, address, created_at
      FROM users ${where}
      ORDER BY id`,
     params
@@ -28,24 +29,60 @@ async function findAll({ role, search } = {}) {
 
 async function findById(id) {
   const { rows } = await pool.query(
-    `SELECT id, full_name, email, phone, role, is_active, avatar_url, address, facebook, twitter, created_at
+    `SELECT id, full_name, email, phone, role, is_active, avatar_url, address, created_at
      FROM users WHERE id = $1`,
     [id]
   );
   return rows[0] || null;
 }
 
-async function create({ fullName, email, phone, role, password }) {
+async function validateGroupIds(groupIds) {
+  if (!Array.isArray(groupIds)) {
+    throw new AppError(400, 'group_ids must be an array');
+  }
+
+  const ids = [...new Set(groupIds.map(Number))];
+  if (ids.some((id) => !Number.isInteger(id) || id <= 0)) {
+    throw new AppError(400, 'Invalid group_ids');
+  }
+  if (!ids.length) return [];
+
+  const { rows } = await pool.query('SELECT id FROM groups WHERE id = ANY($1::int[])', [ids]);
+  if (rows.length !== ids.length) {
+    throw new AppError(404, 'Group not found');
+  }
+  return ids;
+}
+
+async function create({ fullName, email, phone, address, role, password, groupIds = [] }) {
   const passwordHash = await bcrypt.hash(password, 10);
+  const groups = await validateGroupIds(groupIds);
+
+  if (role !== 'technician' && groups.length) {
+    throw new AppError(400, 'Groups can only be assigned to technicians');
+  }
 
   try {
-    const { rows } = await pool.query(
-      `INSERT INTO users (full_name, email, phone, role, password_hash)
-       VALUES ($1, $2, $3, $4, $5)
-       RETURNING id, full_name, email, phone, role, is_active, avatar_url, address, facebook, twitter, created_at`,
-      [fullName, email.toLowerCase(), phone || null, role, passwordHash]
-    );
-    return rows[0];
+    return await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `INSERT INTO users (full_name, email, phone, address, role, password_hash)
+         VALUES ($1, $2, $3, $4, $5, $6)
+         RETURNING id, full_name, email, phone, role, is_active, avatar_url, address, created_at`,
+        [fullName, email.toLowerCase(), phone || null, address || null, role, passwordHash]
+      );
+      const user = rows[0];
+
+      if (groups.length) {
+        await client.query(
+          `INSERT INTO group_members (group_id, user_id)
+           SELECT unnest($1::int[]), $2
+           ON CONFLICT DO NOTHING`,
+          [groups, user.id]
+        );
+      }
+
+      return user;
+    });
   } catch (err) {
     if (err.code === '23505') {
       throw new AppError(400, 'Email already exists');
@@ -54,7 +91,7 @@ async function create({ fullName, email, phone, role, password }) {
   }
 }
 
-async function update(id, changes) {
+async function update(id, changes, groupIds) {
   const current = await findById(id);
   if (!current) {
     throw new AppError(404, 'User not found');
@@ -67,30 +104,52 @@ async function update(id, changes) {
     role: changes.role !== undefined ? changes.role : current.role,
     is_active: changes.is_active !== undefined ? changes.is_active : current.is_active,
     address: changes.address !== undefined ? changes.address : current.address,
-    facebook: changes.facebook !== undefined ? changes.facebook : current.facebook,
-    twitter: changes.twitter !== undefined ? changes.twitter : current.twitter,
   };
 
+  let groups = [];
+  if (groupIds !== undefined) {
+    groups = await validateGroupIds(groupIds);
+    if (next.role !== 'technician' && groups.length) {
+      throw new AppError(400, 'Groups can only be assigned to technicians');
+    }
+  }
+
   try {
-    const { rows } = await pool.query(
-      `UPDATE users
-       SET full_name = $2, email = $3, phone = $4, role = $5, is_active = $6,
-           address = $7, facebook = $8, twitter = $9, updated_at = now()
-       WHERE id = $1
-       RETURNING id, full_name, email, phone, role, is_active, avatar_url, address, facebook, twitter, created_at`,
-      [
-        id,
-        next.full_name,
-        next.email,
-        next.phone || null,
-        next.role,
-        next.is_active,
-        next.address || null,
-        next.facebook || null,
-        next.twitter || null,
-      ]
-    );
-    return rows[0];
+    return await withTransaction(async (client) => {
+      const { rows } = await client.query(
+        `UPDATE users
+         SET full_name = $2, email = $3, phone = $4, role = $5, is_active = $6,
+             address = $7, updated_at = now()
+         WHERE id = $1
+         RETURNING id, full_name, email, phone, role, is_active, avatar_url, address, created_at`,
+        [
+          id,
+          next.full_name,
+          next.email,
+          next.phone || null,
+          next.role,
+          next.is_active,
+          next.address || null,
+        ]
+      );
+      const user = rows[0];
+
+      if (groupIds !== undefined) {
+        await client.query('DELETE FROM group_members WHERE user_id = $1', [id]);
+        if (groups.length) {
+          await client.query(
+            `INSERT INTO group_members (group_id, user_id)
+             SELECT unnest($1::int[]), $2
+             ON CONFLICT DO NOTHING`,
+            [groups, id]
+          );
+        }
+      } else if (user.role !== 'technician') {
+        await client.query('DELETE FROM group_members WHERE user_id = $1', [id]);
+      }
+
+      return user;
+    });
   } catch (err) {
     if (err.code === '23505') {
       throw new AppError(400, 'Email already exists');
@@ -148,6 +207,18 @@ async function getTicketStats(userId) {
   };
 }
 
+async function findGroupsForUser(userId) {
+  const { rows } = await pool.query(
+    `SELECT g.id, g.name
+     FROM group_members gm
+     JOIN groups g ON g.id = gm.group_id
+     WHERE gm.user_id = $1
+     ORDER BY g.name`,
+    [userId]
+  );
+  return rows;
+}
+
 async function findTechnicians() {
   const { rows } = await pool.query(
     `SELECT id, full_name, email
@@ -158,4 +229,13 @@ async function findTechnicians() {
   return rows;
 }
 
-module.exports = { findAll, findById, create, update, resetPassword, getTicketStats, findTechnicians };
+module.exports = {
+  findAll,
+  findById,
+  create,
+  update,
+  resetPassword,
+  getTicketStats,
+  findGroupsForUser,
+  findTechnicians,
+};
