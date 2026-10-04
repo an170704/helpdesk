@@ -103,10 +103,10 @@ const routes = [
         meta: { roles: ['admin'], directory: 'members' },
       },
       {
-        path: 'staff',
-        name: 'staff',
+        path: 'agents',
+        name: 'agents',
         component: () => import('../views/admin/UserListView.vue'),
-        meta: { roles: ['admin'], directory: 'staff' },
+        meta: { roles: ['admin'], directory: 'agents' },
       },
       {
         path: 'groups',

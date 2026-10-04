@@ -2,7 +2,9 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { roleLabel } from '../utils/roles'
 import NotificationBell from '../components/NotificationBell.vue'
+import ChatWidget from '../components/ChatWidget.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -20,6 +22,7 @@ const ICONS = {
   chat: '<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>',
   layers: '<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
   tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
+  headset: '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>',
 }
 
 const sections = computed(() => {
@@ -37,7 +40,7 @@ const sections = computed(() => {
         items: [
           { label: 'Knowledge Base', to: '/kb', icon: 'book' },
           { label: 'Members', to: '/users', icon: 'users' },
-          { label: 'Staff', to: '/staff', icon: 'tool' },
+          { label: 'Agents', to: '/agents', icon: 'headset' },
           { label: 'Groups', to: '/groups', icon: 'layers' },
           { label: 'Categories', to: '/categories', icon: 'tag', soon: true },
           { label: 'Chatbot', to: '/chatbot', icon: 'chat' },
@@ -129,7 +132,7 @@ function handleLogout() {
           <div>
             <div class="user-name">{{ auth.user?.full_name }}</div>
             <span class="badge" :class="auth.isAdmin ? 'badge-admin' : auth.isTechnician ? 'badge-tech' : 'badge-user'">
-              {{ auth.user?.role }}
+              {{ roleLabel(auth.user) }}
             </span>
           </div>
         </router-link>
@@ -140,5 +143,7 @@ function handleLogout() {
     <main class="layout-main">
       <router-view />
     </main>
+
+    <ChatWidget v-if="!auth.isAdmin" />
   </div>
 </template>

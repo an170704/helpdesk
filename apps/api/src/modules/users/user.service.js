@@ -19,7 +19,7 @@ async function findAll({ role, search } = {}) {
   const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
 
   const { rows } = await pool.query(
-    `SELECT id, full_name, email, phone, role, is_active, avatar_url, address, created_at
+    `SELECT id, full_name, email, phone, role, title, is_active, avatar_url, address, created_at
      FROM users ${where}
      ORDER BY id`,
     params
@@ -29,7 +29,7 @@ async function findAll({ role, search } = {}) {
 
 async function findById(id) {
   const { rows } = await pool.query(
-    `SELECT id, full_name, email, phone, role, is_active, avatar_url, address, created_at
+    `SELECT id, full_name, email, phone, role, title, is_active, avatar_url, address, created_at
      FROM users WHERE id = $1`,
     [id]
   );
@@ -54,7 +54,7 @@ async function validateGroupIds(groupIds) {
   return ids;
 }
 
-async function create({ fullName, email, phone, address, role, password, groupIds = [] }) {
+async function create({ fullName, email, phone, address, role, title, password, groupIds = [] }) {
   const passwordHash = await bcrypt.hash(password, 10);
   const groups = await validateGroupIds(groupIds);
 
@@ -65,10 +65,10 @@ async function create({ fullName, email, phone, address, role, password, groupId
   try {
     return await withTransaction(async (client) => {
       const { rows } = await client.query(
-        `INSERT INTO users (full_name, email, phone, address, role, password_hash)
-         VALUES ($1, $2, $3, $4, $5, $6)
-         RETURNING id, full_name, email, phone, role, is_active, avatar_url, address, created_at`,
-        [fullName, email.toLowerCase(), phone || null, address || null, role, passwordHash]
+        `INSERT INTO users (full_name, email, phone, address, role, title, password_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, $7)
+         RETURNING id, full_name, email, phone, role, title, is_active, avatar_url, address, created_at`,
+        [fullName, email.toLowerCase(), phone || null, address || null, role, title || null, passwordHash]
       );
       const user = rows[0];
 
@@ -102,9 +102,14 @@ async function update(id, changes, groupIds) {
     email: changes.email !== undefined ? changes.email.toLowerCase() : current.email,
     phone: changes.phone !== undefined ? changes.phone : current.phone,
     role: changes.role !== undefined ? changes.role : current.role,
+    title: changes.title !== undefined ? changes.title : current.title,
     is_active: changes.is_active !== undefined ? changes.is_active : current.is_active,
     address: changes.address !== undefined ? changes.address : current.address,
   };
+
+  if (next.role !== 'technician') {
+    next.title = null;
+  }
 
   let groups = [];
   if (groupIds !== undefined) {
@@ -119,9 +124,9 @@ async function update(id, changes, groupIds) {
       const { rows } = await client.query(
         `UPDATE users
          SET full_name = $2, email = $3, phone = $4, role = $5, is_active = $6,
-             address = $7, updated_at = now()
+             address = $7, title = $8, updated_at = now()
          WHERE id = $1
-         RETURNING id, full_name, email, phone, role, is_active, avatar_url, address, created_at`,
+         RETURNING id, full_name, email, phone, role, title, is_active, avatar_url, address, created_at`,
         [
           id,
           next.full_name,
@@ -130,6 +135,7 @@ async function update(id, changes, groupIds) {
           next.role,
           next.is_active,
           next.address || null,
+          next.title || null,
         ]
       );
       const user = rows[0];

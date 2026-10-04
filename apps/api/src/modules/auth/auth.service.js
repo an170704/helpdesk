@@ -11,6 +11,7 @@ function toPublicUser(user) {
     email: user.email,
     full_name: user.full_name,
     role: user.role,
+    title: user.title || null,
   };
 }
 
@@ -24,7 +25,7 @@ function generateToken(user) {
 
 async function findByEmail(email) {
   const { rows } = await pool.query(
-    `SELECT id, email, password_hash, full_name, role, is_active
+    `SELECT id, email, password_hash, full_name, role, title, is_active
      FROM users
      WHERE email = $1`,
     [email]
@@ -34,7 +35,7 @@ async function findByEmail(email) {
 
 async function findById(id) {
   const { rows } = await pool.query(
-    `SELECT id, email, full_name, role, is_active
+    `SELECT id, email, full_name, role, title, is_active
      FROM users
      WHERE id = $1`,
     [id]

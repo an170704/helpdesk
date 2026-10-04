@@ -1,5 +1,41 @@
 const pool = require('../../config/db');
 
+const KEY_PROVIDER = 'llm_provider';
+const KEY_BASE_URL = 'llm_base_url';
+const KEY_MODEL = 'llm_model';
+const KEY_API_KEY = 'llm_api_key';
+const KEY_CHATBOT_ENABLED = 'chatbot_enabled';
+
+const DEFAULT_PROVIDER = 'gemini';
+
+// All presets speak the OpenAI-compatible chat completions format
+const PROVIDERS = {
+  gemini: {
+    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
+    model: 'gemini-flash-latest',
+  },
+  groq: {
+    baseUrl: 'https://api.groq.com/openai/v1',
+    model: 'llama-3.3-70b-versatile',
+  },
+  openrouter: {
+    baseUrl: 'https://openrouter.ai/api/v1',
+    model: 'meta-llama/llama-3.3-70b-instruct:free',
+  },
+  deepseek: {
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-flash',
+  },
+  openai: {
+    baseUrl: 'https://api.openai.com/v1',
+    model: 'gpt-4o-mini',
+  },
+  ollama: {
+    baseUrl: 'http://localhost:11434/v1',
+    model: 'llama3.1',
+  },
+};
+
 async function getValue(key) {
   const { rows } = await pool.query('SELECT value FROM settings WHERE key = $1', [key]);
   return rows[0] ? rows[0].value : null;
@@ -18,4 +54,42 @@ async function remove(key) {
   await pool.query('DELETE FROM settings WHERE key = $1', [key]);
 }
 
-module.exports = { getValue, setValue, remove };
+async function getChatbotConfig() {
+  const [provider, baseUrl, model, apiKey] = await Promise.all([
+    getValue(KEY_PROVIDER),
+    getValue(KEY_BASE_URL),
+    getValue(KEY_MODEL),
+    getValue(KEY_API_KEY),
+  ]);
+
+  const active = provider && (provider === 'custom' || PROVIDERS[provider]) ? provider : DEFAULT_PROVIDER;
+  const preset = PROVIDERS[active] || PROVIDERS[DEFAULT_PROVIDER];
+
+  return {
+    provider: active,
+    baseUrl: baseUrl || preset.baseUrl,
+    model: model || preset.model,
+    apiKey: apiKey || '',
+  };
+}
+
+// Chat widget is shown unless the admin explicitly turned it off
+async function isChatbotEnabled() {
+  const value = await getValue(KEY_CHATBOT_ENABLED);
+  return value !== 'false';
+}
+
+module.exports = {
+  KEY_PROVIDER,
+  KEY_BASE_URL,
+  KEY_MODEL,
+  KEY_API_KEY,
+  KEY_CHATBOT_ENABLED,
+  DEFAULT_PROVIDER,
+  PROVIDERS,
+  getValue,
+  setValue,
+  remove,
+  getChatbotConfig,
+  isChatbotEnabled,
+};

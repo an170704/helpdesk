@@ -6,6 +6,7 @@ import { getTickets } from '../../api/tickets'
 import { formatDate } from '../../utils/format'
 import { initials, avatarColor } from '../../utils/avatar'
 import { PRIORITY_LABEL } from '../../utils/status'
+import { roleLabel } from '../../utils/roles'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 
@@ -21,7 +22,7 @@ const activeTab = ref('details')
 
 const saving = ref(false)
 const formError = ref('')
-const form = ref({ full_name: '', email: '', phone: '', address: '', role: 'user' })
+const form = ref({ full_name: '', email: '', phone: '', address: '', role: 'user', title: '' })
 
 let noticeTimer = null
 
@@ -53,6 +54,7 @@ function syncForm() {
     phone: user.value.phone || '',
     address: user.value.address || '',
     role: user.value.role,
+    title: user.value.title || '',
   }
 }
 
@@ -85,6 +87,7 @@ async function save() {
       full_name: form.value.full_name.trim(),
       phone: form.value.phone.trim() || null,
       address: form.value.address.trim() || null,
+      title: form.value.role === 'technician' ? form.value.title.trim() || null : null,
     })
     user.value = updated
     auth.setUser({ ...auth.user, ...updated })
@@ -115,7 +118,7 @@ onMounted(load)
         <div class="profile-info">
           <h2>
             {{ user.full_name }}
-            <span class="badge" :class="ROLE_BADGE[user.role]">{{ user.role }}</span>
+            <span class="badge" :class="ROLE_BADGE[user.role]">{{ roleLabel(user) }}</span>
           </h2>
           <p class="muted">{{ user.email }}</p>
           <p class="muted small">Member since {{ formatDate(user.created_at) }}</p>
@@ -154,9 +157,14 @@ onMounted(load)
             <label for="p-role">Role</label>
             <select id="p-role" v-model="form.role" disabled>
               <option value="user">User</option>
-              <option value="technician">Technician</option>
+              <option value="technician">Agent</option>
               <option value="admin">Admin</option>
             </select>
+
+            <template v-if="form.role === 'technician'">
+              <label for="p-title">Label (optional)</label>
+              <input id="p-title" v-model="form.title" type="text" placeholder="Agent (default)" />
+            </template>
 
             <label class="checkbox-row">
               <input type="checkbox" checked disabled />

@@ -169,7 +169,7 @@ async function addAgents() {
     addOpen.value = false
     await loadGroup()
   } catch (err) {
-    addError.value = err.response?.data?.message || 'Could not add agents'
+    addError.value = err.response?.data?.message || 'Could not add members'
   } finally {
     adding.value = false
   }
@@ -248,14 +248,14 @@ onMounted(loadAll)
             </p>
           </div>
           <div class="group-meta">
-            <span class="badge badge-gray">{{ group.members.length }} agent(s)</span>
+            <span class="badge badge-gray">{{ group.members.length }} member(s)</span>
             <span class="badge badge-blue">{{ group.ticket_count }} ticket(s)</span>
           </div>
         </div>
 
         <div class="profile-tabs" style="margin-top: 14px">
           <button :class="{ active: tab === 'agents' }" @click="tab = 'agents'">
-            Agents ({{ group.members.length }})
+            Members ({{ group.members.length }})
           </button>
           <button :class="{ active: tab === 'categories' }" @click="tab = 'categories'">
             Categories ({{ assignedCategories.length }})
@@ -269,20 +269,20 @@ onMounted(loadAll)
                 <circle cx="11" cy="11" r="8" />
                 <path d="m21 21-4.3-4.3" />
               </svg>
-              <input v-model="memberSearch" type="text" placeholder="Search agents..." />
+              <input v-model="memberSearch" type="text" placeholder="Search members..." />
             </div>
             <div class="filters-right">
-              <button class="btn btn-small" @click="openAddAgents">Add agents</button>
+              <button class="btn btn-small" @click="openAddAgents">Add members</button>
             </div>
           </div>
 
-          <p v-if="!filteredMembers.length" class="muted">No agents found.</p>
+          <p v-if="!filteredMembers.length" class="muted">No members found.</p>
 
           <div v-else class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Agent</th>
+                  <th>Member</th>
                   <th>Email</th>
                   <th class="menu-col"></th>
                 </tr>
@@ -344,8 +344,8 @@ onMounted(loadAll)
         </template>
       </section>
 
-      <ModalDialog :open="addOpen" title="Add agents" @close="addOpen = false">
-        <label for="agent-input">Add agents</label>
+      <ModalDialog :open="addOpen" title="Add members" @close="addOpen = false">
+        <label for="agent-input">Add members</label>
 
         <div class="chips-input" @click="agentInputEl && agentInputEl.focus()">
           <span v-for="chip in chips" :key="chip" class="chip">

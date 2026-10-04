@@ -1,63 +1,16 @@
 const AppError = require('../../utils/AppError');
 const settingService = require('./setting.service');
 
-const KEY_PROVIDER = 'llm_provider';
-const KEY_BASE_URL = 'llm_base_url';
-const KEY_MODEL = 'llm_model';
-const KEY_API_KEY = 'llm_api_key';
-
-const DEFAULT_PROVIDER = 'gemini';
-
-// All presets speak the OpenAI-compatible chat completions format
-const PROVIDERS = {
-  gemini: {
-    baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-2.0-flash',
-  },
-  groq: {
-    baseUrl: 'https://api.groq.com/openai/v1',
-    model: 'llama-3.3-70b-versatile',
-  },
-  openrouter: {
-    baseUrl: 'https://openrouter.ai/api/v1',
-    model: 'meta-llama/llama-3.3-70b-instruct:free',
-  },
-  openai: {
-    baseUrl: 'https://api.openai.com/v1',
-    model: 'gpt-4o-mini',
-  },
-  ollama: {
-    baseUrl: 'http://localhost:11434/v1',
-    model: 'llama3.1',
-  },
-};
+const { PROVIDERS, KEY_PROVIDER, KEY_BASE_URL, KEY_MODEL, KEY_API_KEY, KEY_CHATBOT_ENABLED } = settingService;
 
 function maskKey(key) {
   if (!key) return '';
   return key.length <= 4 ? '••••' : `••••${key.slice(-4)}`;
 }
 
-async function readConfig() {
-  const [provider, baseUrl, model, apiKey] = await Promise.all([
-    settingService.getValue(KEY_PROVIDER),
-    settingService.getValue(KEY_BASE_URL),
-    settingService.getValue(KEY_MODEL),
-    settingService.getValue(KEY_API_KEY),
-  ]);
-
-  const active = provider && (provider === 'custom' || PROVIDERS[provider]) ? provider : DEFAULT_PROVIDER;
-  const preset = PROVIDERS[active] || PROVIDERS[DEFAULT_PROVIDER];
-
-  return {
-    provider: active,
-    baseUrl: baseUrl || preset.baseUrl,
-    model: model || preset.model,
-    apiKey: apiKey || '',
-  };
-}
-
 async function getChatbot(req, res) {
-  const config = await readConfig();
+  const config = await settingService.getChatbotConfig();
+  const enabled = await settingService.isChatbotEnabled();
 
   res.json({
     settings: {
@@ -66,12 +19,20 @@ async function getChatbot(req, res) {
       model: config.model,
       apiKeySet: !!config.apiKey,
       apiKeyMasked: maskKey(config.apiKey),
+      enabled,
     },
   });
 }
 
 async function updateChatbot(req, res) {
-  const { provider, base_url, model, api_key } = req.body || {};
+  const { provider, base_url, model, api_key, enabled } = req.body || {};
+
+  if (enabled !== undefined) {
+    if (typeof enabled !== 'boolean') {
+      throw new AppError(400, 'enabled must be a boolean');
+    }
+    await settingService.setValue(KEY_CHATBOT_ENABLED, enabled ? 'true' : 'false');
+  }
 
   if (provider !== undefined) {
     if (provider !== 'custom' && !PROVIDERS[provider]) {
@@ -112,7 +73,7 @@ async function updateChatbot(req, res) {
 
 async function testChatbot(req, res) {
   const body = req.body || {};
-  const config = await readConfig();
+  const config = await settingService.getChatbotConfig();
 
   const baseUrl = (body.base_url || config.baseUrl).replace(/\/+$/, '');
   const apiKey = body.api_key ? String(body.api_key).trim() : config.apiKey;

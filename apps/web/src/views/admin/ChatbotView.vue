@@ -6,7 +6,7 @@ const PROVIDER_PRESETS = {
   gemini: {
     label: 'Google Gemini (free tier)',
     baseUrl: 'https://generativelanguage.googleapis.com/v1beta/openai',
-    model: 'gemini-2.0-flash',
+    model: 'gemini-flash-latest',
   },
   groq: {
     label: 'Groq — Llama (free tier)',
@@ -17,6 +17,11 @@ const PROVIDER_PRESETS = {
     label: 'OpenRouter (free models available)',
     baseUrl: 'https://openrouter.ai/api/v1',
     model: 'meta-llama/llama-3.3-70b-instruct:free',
+  },
+  deepseek: {
+    label: 'DeepSeek',
+    baseUrl: 'https://api.deepseek.com',
+    model: 'deepseek-flash',
   },
   openai: {
     label: 'OpenAI (paid)',
@@ -46,6 +51,7 @@ const provider = ref('gemini')
 const baseUrl = ref('')
 const model = ref('')
 const apiKey = ref('')
+const enabled = ref(true)
 
 let noticeTimer = null
 
@@ -72,6 +78,7 @@ async function load() {
     provider.value = settings.value.provider
     baseUrl.value = settings.value.baseUrl
     model.value = settings.value.model
+    enabled.value = settings.value.enabled !== false
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to load settings'
   } finally {
@@ -86,6 +93,7 @@ async function save() {
       provider: provider.value,
       base_url: baseUrl.value.trim(),
       model: model.value.trim(),
+      enabled: enabled.value,
       ...(apiKey.value.trim() && { api_key: apiKey.value.trim() }),
     })
     apiKey.value = ''
@@ -117,7 +125,7 @@ onMounted(load)
 </script>
 
 <template>
-  <section class="card form-card">
+  <section class="card chatbot-form">
     <h2>Chatbot settings</h2>
     <p class="muted">
       Connect the help assistant to any OpenAI-compatible LLM provider. The key is stored server-side and never sent back in full.
@@ -132,6 +140,11 @@ onMounted(load)
         <b v-if="settings.apiKeySet" class="mono">{{ settings.apiKeyMasked }}</b>
         <span v-else>not configured</span>
       </p>
+
+      <label class="checkbox-row">
+        <input v-model="enabled" type="checkbox" />
+        Show the HelpBot chat bubble to users
+      </label>
 
       <label for="provider">Provider</label>
       <select id="provider" v-model="provider">

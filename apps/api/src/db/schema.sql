@@ -13,6 +13,7 @@ CREATE TABLE users (
   address       VARCHAR(255),
   role          VARCHAR(10) NOT NULL DEFAULT 'user'
                 CHECK (role IN ('user','technician','admin')),
+  title         VARCHAR(100),
   is_active     BOOLEAN NOT NULL DEFAULT TRUE,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now()

@@ -283,12 +283,12 @@ onUnmounted(() => {
       ></textarea>
 
       <template v-if="editing">
-        <p class="muted small">Manage the group's agents and categories from the group page.</p>
+        <p class="muted small">Manage the group's members and categories from the group page.</p>
       </template>
 
       <label v-else class="checkbox-row">
         <input v-model="addMembersNext" type="checkbox" />
-        Add agents in the next step
+        Add members in the next step
       </label>
 
       <p v-if="formError" class="error">{{ formError }}</p>

@@ -6,6 +6,7 @@ import { getUsers, updateUser, resetPassword, createUser } from '../../api/users
 import { getGroups } from '../../api/groups'
 import { formatDate } from '../../utils/format'
 import { initials, avatarColor } from '../../utils/avatar'
+import { roleLabel } from '../../utils/roles'
 import Pagination from '../../components/Pagination.vue'
 import SideDrawer from '../../components/SideDrawer.vue'
 import MultiSelect from '../../components/MultiSelect.vue'
@@ -14,9 +15,9 @@ const auth = useAuthStore()
 const route = useRoute()
 const router = useRouter()
 
-const isStaffMode = computed(() => route.meta.directory === 'staff')
-const pageTitle = computed(() => (isStaffMode.value ? 'Staff' : 'Members'))
-const addLabel = computed(() => (isStaffMode.value ? 'Add staff' : 'Add member'))
+const isStaffMode = computed(() => route.meta.directory === 'agents')
+const pageTitle = computed(() => (isStaffMode.value ? 'Agents' : 'Members'))
+const addLabel = computed(() => (isStaffMode.value ? 'Add agent' : 'Add member'))
 
 const users = ref([])
 const groups = ref([])
@@ -33,7 +34,7 @@ const menuPosition = ref({ top: 0, left: 0 })
 const drawerOpen = ref(false)
 const saving = ref(false)
 const formError = ref('')
-const form = ref({ full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', groupIds: [] })
+const form = ref({ full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', title: '', groupIds: [] })
 
 let noticeTimer = null
 
@@ -42,9 +43,7 @@ const ROLE_BADGE = { admin: 'badge-admin', technician: 'badge-tech', user: 'badg
 const groupOptions = computed(() => groups.value.map((group) => ({ id: group.id, label: group.name })))
 
 const directoryUsers = computed(() =>
-  users.value.filter((u) =>
-    isStaffMode.value ? u.role === 'technician' || u.role === 'admin' : u.role === 'user'
-  )
+  users.value.filter((u) => (isStaffMode.value ? u.role === 'technician' : u.role === 'user'))
 )
 
 const filteredUsers = computed(() => {
@@ -94,7 +93,7 @@ async function loadGroups() {
 }
 
 function openDrawer() {
-  form.value = { full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', groupIds: [] }
+  form.value = { full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', title: '', groupIds: [] }
   formError.value = ''
   drawerOpen.value = true
 }
@@ -119,7 +118,7 @@ async function submitDrawer() {
     return
   }
 
-  const role = isStaffMode.value ? form.value.role : 'user'
+  const role = isStaffMode.value ? 'technician' : 'user'
   const groupIds = isStaffMode.value && role === 'technician' ? form.value.groupIds : undefined
 
   saving.value = true
@@ -130,11 +129,12 @@ async function submitDrawer() {
       phone: form.value.phone.trim() || null,
       address: form.value.address.trim() || null,
       role,
+      title: role === 'technician' ? form.value.title.trim() || null : null,
       password: form.value.password,
       ...(groupIds && { group_ids: groupIds }),
     })
     drawerOpen.value = false
-    showNotice(`${isStaffMode.value ? 'Staff member' : 'Member'} "${form.value.full_name.trim()}" created`)
+    showNotice(`${isStaffMode.value ? 'Agent' : 'Member'} "${form.value.full_name.trim()}" created`)
     await load()
   } catch (err) {
     formError.value = err.response?.data?.message || 'Could not create the account'
@@ -262,7 +262,7 @@ onUnmounted(() => {
             <td>{{ user.email }}</td>
             <td class="muted">{{ user.phone || '—' }}</td>
             <td v-if="isStaffMode">
-              <span class="badge" :class="ROLE_BADGE[user.role]">{{ user.role }}</span>
+              <span class="badge" :class="ROLE_BADGE[user.role]">{{ roleLabel(user) }}</span>
             </td>
             <td>
               <span class="badge" :class="user.is_active ? 'badge-green' : 'badge-red'">
@@ -324,15 +324,10 @@ onUnmounted(() => {
       <label for="d-address">Address</label>
       <input id="d-address" v-model="form.address" type="text" placeholder="e.g. 123 Le Loi, District 1" />
 
-      <template v-if="isStaffMode">
-        <label for="d-role">Role *</label>
-        <select id="d-role" v-model="form.role">
-          <option value="technician">Technician</option>
-          <option value="admin">Admin</option>
-        </select>
-      </template>
-
       <template v-if="isStaffMode && form.role === 'technician'">
+        <label for="d-title">Label (optional)</label>
+        <input id="d-title" v-model="form.title" type="text" placeholder="Agent (default)" />
+
         <label>Groups</label>
         <p v-if="!groups.length" class="muted small">No groups available.</p>
         <MultiSelect

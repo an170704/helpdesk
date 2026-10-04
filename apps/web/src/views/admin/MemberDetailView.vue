@@ -7,6 +7,7 @@ import { getGroups } from '../../api/groups'
 import { formatDate } from '../../utils/format'
 import { initials, avatarColor } from '../../utils/avatar'
 import { PRIORITY_LABEL } from '../../utils/status'
+import { roleLabel } from '../../utils/roles'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 import MultiSelect from '../../components/MultiSelect.vue'
@@ -34,6 +35,7 @@ const detailForm = ref({
   phone: '',
   address: '',
   role: 'user',
+  title: '',
   is_active: true,
   group_ids: [],
 })
@@ -68,6 +70,7 @@ function syncDetailForm() {
     phone: user.value.phone || '',
     address: user.value.address || '',
     role: user.value.role,
+    title: user.value.title || '',
     is_active: user.value.is_active,
     group_ids: overviewGroups.value.map((g) => g.id),
   }
@@ -124,6 +127,7 @@ async function saveDetails() {
       phone: form.phone.trim() || null,
       address: form.address.trim() || null,
       role: form.role,
+      title: form.role === 'technician' ? form.title.trim() || null : null,
       is_active: form.is_active,
       group_ids: form.role === 'technician' ? form.group_ids : [],
     })
@@ -178,7 +182,7 @@ onMounted(load)
             <div class="profile-info">
               <h2>
                 {{ user.full_name }}
-                <span class="badge" :class="ROLE_BADGE[user.role]">{{ user.role }}</span>
+                <span class="badge" :class="ROLE_BADGE[user.role]">{{ roleLabel(user) }}</span>
               </h2>
               <p class="muted">{{ user.email }}</p>
               <p class="muted small">Member since {{ formatDate(user.created_at) }}</p>
@@ -235,14 +239,18 @@ onMounted(load)
                 <input id="m-address" v-model="detailForm.address" type="text" placeholder="e.g. 123 Le Loi, District 1, HCMC" />
 
                 <label for="m-role">Role</label>
-                <select id="m-role" v-model="detailForm.role" :disabled="isSelf">
+                <select id="m-role" v-model="detailForm.role" :disabled="isSelf || user.role === 'admin'">
+                  <option v-if="user.role === 'admin'" value="admin">Admin</option>
                   <option value="user">User</option>
-                  <option value="technician">Technician</option>
-                  <option value="admin">Admin</option>
+                  <option value="technician">Agent</option>
                 </select>
                 <p v-if="isSelf" class="field-hint muted small">You cannot change your own role.</p>
+                <p v-else-if="user.role === 'admin'" class="field-hint muted small">Admin accounts cannot be edited here.</p>
 
                 <template v-if="detailForm.role === 'technician'">
+                  <label for="m-title">Label (optional)</label>
+                  <input id="m-title" v-model="detailForm.title" type="text" placeholder="Agent (default)" />
+
                   <label>Groups</label>
                   <p v-if="!groups.length" class="muted small">No groups available.</p>
                   <MultiSelect
@@ -341,7 +349,7 @@ onMounted(load)
 
           <div class="detail-block">
             <span class="detail-label">Role</span>
-            <span class="badge" :class="ROLE_BADGE[user.role]">{{ user.role }}</span>
+            <span class="badge" :class="ROLE_BADGE[user.role]">{{ roleLabel(user) }}</span>
           </div>
 
           <div class="detail-block">

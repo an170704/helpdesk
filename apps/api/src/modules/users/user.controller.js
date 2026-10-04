@@ -32,7 +32,7 @@ async function getUser(req, res) {
 }
 
 async function createUser(req, res) {
-  const { full_name, email, phone, address, role, password, group_ids } = req.body || {};
+  const { full_name, email, phone, address, role, title, password, group_ids } = req.body || {};
 
   if (!full_name || !full_name.trim()) {
     throw new AppError(400, 'full_name is required');
@@ -55,6 +55,7 @@ async function createUser(req, res) {
     phone: phone || null,
     address: address || null,
     role,
+    title: role === 'technician' ? title || null : null,
     password,
     groupIds: group_ids === undefined ? [] : group_ids,
   });
@@ -65,6 +66,9 @@ async function createUser(req, res) {
 function validateContactFields(body) {
   if (body.address !== undefined && body.address !== null && String(body.address).length > 255) {
     throw new AppError(400, 'address must not exceed 255 characters');
+  }
+  if (body.title !== undefined && body.title !== null && String(body.title).length > 100) {
+    throw new AppError(400, 'title must not exceed 100 characters');
   }
 }
 
