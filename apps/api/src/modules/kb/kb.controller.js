@@ -85,7 +85,7 @@ async function getArticle(req, res) {
     throw new AppError(400, 'Invalid ID');
   }
 
-  const article = await kbService.findById(id, req.user.role === 'admin');
+  const article = await kbService.findById(id, req.user.role !== 'user');
   if (!article) {
     throw new AppError(404, 'Article not found');
   }

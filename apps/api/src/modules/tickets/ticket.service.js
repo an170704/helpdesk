@@ -326,6 +326,13 @@ async function assignTicket({ ticketId, actorId, assignedTo, groupId }) {
       [ticketId, nextAssignedTo, nextGroupId]
     );
 
+    if (assignedTo !== undefined && nextAssignedTo != null) {
+      await client.query(
+        'UPDATE users SET last_assigned_at = now() WHERE id = $1',
+        [nextAssignedTo]
+      );
+    }
+
     const changes = [];
     if (assignedTo !== undefined) {
       changes.push(technician ? `assigned to ${technician.full_name}` : 'assignment removed');

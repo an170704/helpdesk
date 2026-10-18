@@ -22,6 +22,14 @@ INSERT INTO users (email, password_hash, full_name, role) VALUES
   ('tech2@company.com',  crypt('123456', gen_salt('bf')), 'Lan Tran',     'technician')
 ON CONFLICT (email) DO NOTHING;
 
+-- Extra demo agents with custom labels and capacities
+INSERT INTO users (email, password_hash, full_name, role, title, max_open_tickets) VALUES
+  ('tech6@company.com', crypt('123456', gen_salt('bf')), 'Nguyen Van B', 'technician', 'Network Engineer',    5),
+  ('tech7@company.com', crypt('123456', gen_salt('bf')), 'Tran Thi C',   'technician', 'Software Support',    3),
+  ('tech8@company.com', crypt('123456', gen_salt('bf')), 'Le Van D',     'technician', 'Helpdesk Agent',     10),
+  ('tech9@company.com', crypt('123456', gen_salt('bf')), 'Pham Thi E',   'technician', 'Network Technician',  4)
+ON CONFLICT (email) DO NOTHING;
+
 -- Categories: each belongs to one group; flat (no parent categories needed —
 -- the group dropdown prefixes them with the group name automatically)
 INSERT INTO categories (name, description, group_id) VALUES
@@ -47,5 +55,13 @@ INSERT INTO group_members (group_id, user_id) VALUES
   ((SELECT id FROM groups WHERE name = 'Hardware'), (SELECT id FROM users WHERE email = 'tech1@company.com')),
   ((SELECT id FROM groups WHERE name = 'Software'), (SELECT id FROM users WHERE email = 'tech2@company.com')),
   ((SELECT id FROM groups WHERE name = 'Account'),  (SELECT id FROM users WHERE email = 'tech2@company.com')),
-  ((SELECT id FROM groups WHERE name = 'General'),  (SELECT id FROM users WHERE email = 'tech2@company.com'))
+  ((SELECT id FROM groups WHERE name = 'General'),  (SELECT id FROM users WHERE email = 'tech2@company.com')),
+  ((SELECT id FROM groups WHERE name = 'Network'),  (SELECT id FROM users WHERE email = 'tech6@company.com')),
+  ((SELECT id FROM groups WHERE name = 'Hardware'), (SELECT id FROM users WHERE email = 'tech6@company.com')),
+  ((SELECT id FROM groups WHERE name = 'Software'), (SELECT id FROM users WHERE email = 'tech7@company.com')),
+  ((SELECT id FROM groups WHERE name = 'Account'),  (SELECT id FROM users WHERE email = 'tech7@company.com')),
+  ((SELECT id FROM groups WHERE name = 'General'),  (SELECT id FROM users WHERE email = 'tech8@company.com')),
+  ((SELECT id FROM groups WHERE name = 'Hardware'), (SELECT id FROM users WHERE email = 'tech8@company.com')),
+  ((SELECT id FROM groups WHERE name = 'Network'),  (SELECT id FROM users WHERE email = 'tech9@company.com')),
+  ((SELECT id FROM groups WHERE name = 'General'),  (SELECT id FROM users WHERE email = 'tech9@company.com'))
 ON CONFLICT DO NOTHING;

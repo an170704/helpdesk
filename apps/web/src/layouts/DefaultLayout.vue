@@ -2,7 +2,6 @@
 import { computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
-import { roleLabel } from '../utils/roles'
 import NotificationBell from '../components/NotificationBell.vue'
 import ChatWidget from '../components/ChatWidget.vue'
 
@@ -23,6 +22,8 @@ const ICONS = {
   layers: '<path d="m12 2 10 5-10 5L2 7l10-5z"/><path d="m2 17 10 5 10-5"/><path d="m2 12 10 5 10-5"/>',
   tool: '<path d="M14.7 6.3a1 1 0 0 0 0 1.4l1.6 1.6a1 1 0 0 0 1.4 0l3.77-3.77a6 6 0 0 1-7.94 7.94l-6.91 6.91a2.12 2.12 0 0 1-3-3l6.91-6.91a6 6 0 0 1 7.94-7.94l-3.76 3.76z"/>',
   headset: '<path d="M3 18v-6a9 9 0 0 1 18 0v6"/><path d="M21 19a2 2 0 0 1-2 2h-1a2 2 0 0 1-2-2v-3a2 2 0 0 1 2-2h3zM3 19a2 2 0 0 0 2 2h1a2 2 0 0 0 2-2v-3a2 2 0 0 0-2-2H3z"/>',
+  settings: '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
+  user: '<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
 }
 
 const sections = computed(() => {
@@ -42,8 +43,8 @@ const sections = computed(() => {
           { label: 'Members', to: '/users', icon: 'users' },
           { label: 'Agents', to: '/agents', icon: 'headset' },
           { label: 'Groups', to: '/groups', icon: 'layers' },
-          { label: 'Categories', to: '/categories', icon: 'tag', soon: true },
           { label: 'Chatbot', to: '/chatbot', icon: 'chat' },
+          { label: 'Settings', to: '/settings', icon: 'settings' },
         ],
       },
     ]
@@ -55,11 +56,13 @@ const sections = computed(() => {
         title: 'Main',
         items: [
           { label: 'Assigned Tickets', to: '/assigned', icon: 'assigned' },
+          { label: 'My profile', to: '/profile', icon: 'user' },
         ],
       },
       {
         title: 'Support',
         items: [
+          { label: 'Knowledge Base', to: '/kb', icon: 'book' },
           { label: 'FAQ', to: '/faq', icon: 'book' },
         ],
       },
@@ -73,6 +76,7 @@ const sections = computed(() => {
         { label: 'Home', to: '/home', icon: 'home' },
         { label: 'My Tickets', to: '/tickets', icon: 'ticket' },
         { label: 'New Ticket', to: '/tickets/new', icon: 'plus' },
+        { label: 'My profile', to: '/profile', icon: 'user' },
       ],
     },
     {
@@ -84,16 +88,6 @@ const sections = computed(() => {
   ]
 })
 
-const initials = computed(() => {
-  const name = auth.user?.full_name || ''
-  return name
-    .split(' ')
-    .map((word) => word[0])
-    .slice(0, 2)
-    .join('')
-    .toUpperCase()
-})
-
 function handleLogout() {
   auth.logout()
   router.push('/login')
@@ -103,7 +97,7 @@ function handleLogout() {
 <template>
   <div class="layout">
     <aside class="sidebar">
-      <router-link to="/" class="brand">Helpdesk</router-link>
+      <router-link to="/" class="brand">HurtDesk</router-link>
 
       <nav class="side-nav">
         <div v-for="section in sections" :key="section.title" class="nav-section">
@@ -127,15 +121,6 @@ function handleLogout() {
       <div class="sidebar-footer">
         <NotificationBell />
 
-        <router-link to="/profile" class="user-info" title="View profile">
-          <div class="avatar">{{ initials }}</div>
-          <div>
-            <div class="user-name">{{ auth.user?.full_name }}</div>
-            <span class="badge" :class="auth.isAdmin ? 'badge-admin' : auth.isTechnician ? 'badge-tech' : 'badge-user'">
-              {{ roleLabel(auth.user) }}
-            </span>
-          </div>
-        </router-link>
         <button class="btn btn-ghost btn-small logout-btn" @click="handleLogout">Logout</button>
       </div>
     </aside>

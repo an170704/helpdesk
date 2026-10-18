@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
 import { getMe, updateMe } from '../../api/users'
 import { getTickets } from '../../api/tickets'
+import { getMyStats } from '../../api/stats'
 import { formatDate } from '../../utils/format'
 import { initials, avatarColor } from '../../utils/avatar'
 import { PRIORITY_LABEL } from '../../utils/status'
@@ -11,6 +13,7 @@ import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 
 const auth = useAuthStore()
+const router = useRouter()
 
 const loading = ref(true)
 const error = ref('')
@@ -18,6 +21,7 @@ const notice = ref(null)
 const user = ref(null)
 const myGroups = ref([])
 const tickets = ref([])
+const myStats = ref(null)
 const activeTab = ref('details')
 
 const saving = ref(false)
@@ -67,6 +71,14 @@ async function load() {
     myGroups.value = me.groups || []
     tickets.value = list
     syncForm()
+
+    if (me.user.role === 'technician') {
+      try {
+        myStats.value = await getMyStats()
+      } catch {
+        myStats.value = null
+      }
+    }
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to load your profile'
   } finally {
@@ -105,111 +117,178 @@ onMounted(load)
 
 <template>
   <div>
+    <button class="btn btn-ghost btn-small" @click="router.back()">Back</button>
+
     <p v-if="error" class="error">{{ error }}</p>
     <p v-else-if="loading" class="muted">Loading...</p>
 
     <template v-else>
       <p v-if="notice" :class="notice.type === 'error' ? 'error' : 'notice-ok'">{{ notice.text }}</p>
 
-      <div class="card profile-head">
-        <img v-if="user.avatar_url" :src="user.avatar_url" class="avatar-lg-img" alt="" />
-        <span v-else class="avatar-lg" :class="avatarColor(user.full_name || user.email)">{{ initials(user.full_name) }}</span>
+      <div class="profile">
+        <div class="profile-main">
+          <div class="card profile-head">
+            <img v-if="user.avatar_url" :src="user.avatar_url" class="avatar-lg-img" alt="" />
+            <span v-else class="avatar-lg" :class="avatarColor(user.full_name || user.email)">{{ initials(user.full_name) }}</span>
 
-        <div class="profile-info">
-          <h2>
-            {{ user.full_name }}
-            <span class="badge" :class="ROLE_BADGE[user.role]">{{ roleLabel(user) }}</span>
-          </h2>
-          <p class="muted">{{ user.email }}</p>
-          <p class="muted small">Member since {{ formatDate(user.created_at) }}</p>
-        </div>
-      </div>
+            <div class="profile-info">
+              <h2>
+                {{ user.full_name }}
+                <span class="badge" :class="ROLE_BADGE[user.role]">{{ roleLabel(user) }}</span>
+              </h2>
+              <p class="muted">{{ user.email }}</p>
+              <p class="muted small">Member since {{ formatDate(user.created_at) }}</p>
+            </div>
+          </div>
 
-      <div class="card" style="margin-top: 14px">
-        <div class="profile-tabs">
-          <button :class="{ active: activeTab === 'details' }" @click="activeTab = 'details'">Details</button>
-          <button :class="{ active: activeTab === 'created' }" @click="activeTab = 'created'">
-            Tickets created ({{ createdTickets.length }})
-          </button>
-          <button
-            v-if="showAssignedTab"
-            :class="{ active: activeTab === 'assigned' }"
-            @click="activeTab = 'assigned'"
-          >
-            Assigned tickets ({{ assignedTickets.length }})
-          </button>
-        </div>
+          <div class="card">
+            <div class="profile-tabs">
+              <button :class="{ active: activeTab === 'details' }" @click="activeTab = 'details'">Details</button>
+              <button :class="{ active: activeTab === 'created' }" @click="activeTab = 'created'">
+                Tickets created ({{ createdTickets.length }})
+              </button>
+              <button
+                v-if="showAssignedTab"
+                :class="{ active: activeTab === 'assigned' }"
+                @click="activeTab = 'assigned'"
+              >
+                Assigned tickets ({{ assignedTickets.length }})
+              </button>
+            </div>
 
-        <template v-if="activeTab === 'details'">
-          <form class="member-edit-form" @submit.prevent="save">
-            <label for="p-fullName">Full name</label>
-            <input id="p-fullName" v-model="form.full_name" type="text" placeholder="e.g. Nguyen Van A" />
+            <template v-if="activeTab === 'details'">
+              <form class="member-edit-form" @submit.prevent="save">
+                <label for="p-fullName">Full name</label>
+                <input id="p-fullName" v-model="form.full_name" type="text" placeholder="e.g. Nguyen Van A" />
 
-            <label for="p-email">Email</label>
-            <input id="p-email" v-model="form.email" type="text" disabled />
+                <label for="p-email">Email</label>
+                <input id="p-email" v-model="form.email" type="text" disabled />
 
-            <label for="p-phone">Phone (optional)</label>
-            <input id="p-phone" v-model="form.phone" type="text" placeholder="e.g. 0901234567" />
+                <label for="p-phone">Phone (optional)</label>
+                <input id="p-phone" v-model="form.phone" type="text" placeholder="e.g. 0901234567" />
 
-            <label for="p-address">Address (optional)</label>
-            <input id="p-address" v-model="form.address" type="text" placeholder="e.g. 123 Le Loi, District 1, HCMC" />
+                <label for="p-address">Address (optional)</label>
+                <input id="p-address" v-model="form.address" type="text" placeholder="e.g. 123 Le Loi, District 1, HCMC" />
 
-            <label for="p-role">Role</label>
-            <select id="p-role" v-model="form.role" disabled>
-              <option value="user">User</option>
-              <option value="technician">Agent</option>
-              <option value="admin">Admin</option>
-            </select>
+                <label for="p-role">Role</label>
+                <select id="p-role" v-model="form.role" disabled>
+                  <option value="user">User</option>
+                  <option value="technician">Agent</option>
+                  <option value="admin">Admin</option>
+                </select>
 
-            <template v-if="form.role === 'technician'">
-              <label for="p-title">Label (optional)</label>
-              <input id="p-title" v-model="form.title" type="text" placeholder="Agent (default)" />
+                <template v-if="form.role === 'technician'">
+                  <label for="p-title">Label (optional)</label>
+                  <input id="p-title" v-model="form.title" type="text" placeholder="Agent (default)" />
+                </template>
+
+                <label class="checkbox-row">
+                  <input type="checkbox" checked disabled />
+                  Account active
+                </label>
+
+                <p v-if="formError" class="error">{{ formError }}</p>
+
+                <div class="row form-actions">
+                  <button class="btn" type="submit" :disabled="saving">
+                    {{ saving ? 'Saving...' : 'Save changes' }}
+                  </button>
+                  <button class="btn btn-ghost" type="button" @click="syncForm">Cancel</button>
+                </div>
+              </form>
             </template>
 
-            <label class="checkbox-row">
-              <input type="checkbox" checked disabled />
-              Account active
-            </label>
+            <template v-else>
+              <p v-if="!activeTickets.length" class="muted">No tickets yet.</p>
 
-            <p v-if="formError" class="error">{{ formError }}</p>
-
-            <div class="row form-actions">
-              <button class="btn" type="submit" :disabled="saving">
-                {{ saving ? 'Saving...' : 'Save changes' }}
-              </button>
-              <button class="btn btn-ghost" type="button" @click="syncForm">Cancel</button>
-            </div>
-          </form>
-        </template>
-
-        <template v-else>
-          <p v-if="!activeTickets.length" class="muted">No tickets yet.</p>
-
-          <div v-else class="table-wrap">
-            <table>
-              <thead>
-                <tr>
-                  <th>ID</th>
-                  <th>Subject</th>
-                  <th>Status</th>
-                  <th>Priority</th>
-                  <th>Category</th>
-                  <th>Created</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr v-for="ticket in activeTickets" :key="ticket.id">
-                  <td class="mono">{{ ticket.id }}</td>
-                  <td>{{ ticket.subject }}</td>
-                  <td><StatusBadge :status="ticket.status" /></td>
-                  <td><span class="badge badge-gray">{{ PRIORITY_LABEL[ticket.priority] }}</span></td>
-                  <td><CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" /></td>
-                  <td class="muted small">{{ formatDate(ticket.created_at) }}</td>
-                </tr>
-              </tbody>
-            </table>
+              <div v-else class="table-wrap">
+                <table>
+                  <thead>
+                    <tr>
+                      <th>ID</th>
+                      <th>Subject</th>
+                      <th>Status</th>
+                      <th>Priority</th>
+                      <th>Category</th>
+                      <th>Created</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="ticket in activeTickets" :key="ticket.id">
+                      <td class="mono">{{ ticket.id }}</td>
+                      <td>{{ ticket.subject }}</td>
+                      <td><StatusBadge :status="ticket.status" /></td>
+                      <td><span class="badge badge-gray">{{ PRIORITY_LABEL[ticket.priority] }}</span></td>
+                      <td><CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" /></td>
+                      <td class="muted small">{{ formatDate(ticket.created_at) }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </template>
           </div>
-        </template>
+        </div>
+
+        <aside class="card profile-details">
+          <h3>Details</h3>
+
+          <div class="detail-block">
+            <span class="detail-label">Email</span>
+            <span>{{ user.email }}</span>
+          </div>
+
+          <div class="detail-block">
+            <span class="detail-label">Phone</span>
+            <span>{{ user.phone || '—' }}</span>
+          </div>
+
+          <div class="detail-block">
+            <span class="detail-label">Address</span>
+            <span>{{ user.address || '—' }}</span>
+          </div>
+
+          <div class="detail-block">
+            <span class="detail-label">Tickets created</span>
+            <span>{{ createdTickets.length }}</span>
+          </div>
+
+          <div v-if="assignedTickets.length" class="detail-block">
+            <span class="detail-label">Assigned tickets</span>
+            <span>{{ assignedTickets.length }}</span>
+          </div>
+
+          <div v-if="user.role === 'technician'" class="detail-block">
+            <span class="detail-label">Max open tickets</span>
+            <span>{{ user.max_open_tickets == null ? 'Default' : user.max_open_tickets }}</span>
+          </div>
+
+          <div v-if="user.role === 'technician'" class="detail-block">
+            <span class="detail-label">Last assigned</span>
+            <span>{{ user.last_assigned_at ? formatDate(user.last_assigned_at) : 'Never' }}</span>
+          </div>
+
+          <div v-if="myStats && myStats.csat.total" class="detail-block">
+            <span class="detail-label">Satisfaction</span>
+            <span>{{ myStats.csat.positivePercent }}% positive ({{ myStats.csat.total }} rating(s))</span>
+          </div>
+
+          <div class="detail-block">
+            <span class="detail-label">Role</span>
+            <span class="badge" :class="ROLE_BADGE[user.role]">{{ roleLabel(user) }}</span>
+          </div>
+
+          <div class="detail-block">
+            <span class="detail-label">Status</span>
+            <span class="badge" :class="user.is_active ? 'badge-green' : 'badge-red'">
+              {{ user.is_active ? 'Active' : 'Locked' }}
+            </span>
+          </div>
+
+          <div class="detail-block">
+            <span class="detail-label">Member since</span>
+            <span>{{ formatDate(user.created_at) }}</span>
+          </div>
+        </aside>
       </div>
     </template>
   </div>

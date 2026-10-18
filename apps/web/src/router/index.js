@@ -52,19 +52,19 @@ const routes = [
         path: 'kb',
         name: 'kb-list',
         component: () => import('../views/admin/KbListView.vue'),
-        meta: { roles: ['admin'] },
+        meta: { roles: ['admin', 'technician'] },
       },
       {
         path: 'kb/new',
         name: 'kb-create',
         component: () => import('../views/admin/KbFormView.vue'),
-        meta: { roles: ['admin'] },
+        meta: { roles: ['admin', 'technician'] },
       },
       {
         path: 'kb/:id/edit',
         name: 'kb-edit',
         component: () => import('../views/admin/KbFormView.vue'),
-        meta: { roles: ['admin'] },
+        meta: { roles: ['admin', 'technician'] },
       },
       {
         path: 'admin',
@@ -82,6 +82,24 @@ const routes = [
         path: 'admin/tickets/new',
         name: 'admin-ticket-create',
         component: () => import('../views/admin/AdminCreateTicketView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'settings',
+        name: 'settings',
+        component: () => import('../views/admin/SettingsView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'settings/business-hours',
+        name: 'settings-business-hours',
+        component: () => import('../views/admin/BusinessHoursSettingsView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'settings/auto-assignment',
+        name: 'settings-auto-assignment',
+        component: () => import('../views/admin/AutoAssignmentSettingsView.vue'),
         meta: { roles: ['admin'] },
       },
       {

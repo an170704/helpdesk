@@ -35,3 +35,15 @@ export function addGroupMembers(id, emails) {
 export function removeGroupMember(id, userId) {
   return api.delete(`/groups/${id}/members/${userId}`)
 }
+
+export function updateGroupBusinessHours(id, businessHours) {
+  return api
+    .put(`/groups/${id}/business-hours`, { business_hours: businessHours })
+    .then((res) => res.data.business_hours)
+}
+
+export function updateGroupAssignmentMode(id, mode) {
+  return api
+    .put(`/groups/${id}/assignment-mode`, { assignment_mode: mode })
+    .then((res) => res.data.assignment_mode)
+}

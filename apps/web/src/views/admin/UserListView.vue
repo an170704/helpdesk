@@ -34,7 +34,7 @@ const menuPosition = ref({ top: 0, left: 0 })
 const drawerOpen = ref(false)
 const saving = ref(false)
 const formError = ref('')
-const form = ref({ full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', title: '', groupIds: [] })
+const form = ref({ full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', title: '', maxOpenTickets: '', groupIds: [] })
 
 let noticeTimer = null
 
@@ -93,7 +93,7 @@ async function loadGroups() {
 }
 
 function openDrawer() {
-  form.value = { full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', title: '', groupIds: [] }
+  form.value = { full_name: '', email: '', phone: '', address: '', password: '', role: 'technician', title: '', maxOpenTickets: '', groupIds: [] }
   formError.value = ''
   drawerOpen.value = true
 }
@@ -120,6 +120,14 @@ async function submitDrawer() {
 
   const role = isStaffMode.value ? 'technician' : 'user'
   const groupIds = isStaffMode.value && role === 'technician' ? form.value.groupIds : undefined
+  const capacity = isStaffMode.value
+    ? String(form.value.maxOpenTickets ?? '').trim()
+    : ''
+
+  if (capacity && !/^\d+$/.test(capacity)) {
+    formError.value = 'Max open tickets must be a non-negative integer'
+    return
+  }
 
   saving.value = true
   try {
@@ -130,6 +138,7 @@ async function submitDrawer() {
       address: form.value.address.trim() || null,
       role,
       title: role === 'technician' ? form.value.title.trim() || null : null,
+      max_open_tickets: capacity ? Number(capacity) : null,
       password: form.value.password,
       ...(groupIds && { group_ids: groupIds }),
     })
@@ -327,6 +336,16 @@ onUnmounted(() => {
       <template v-if="isStaffMode && form.role === 'technician'">
         <label for="d-title">Label (optional)</label>
         <input id="d-title" v-model="form.title" type="text" placeholder="Agent (default)" />
+
+        <label for="d-capacity">Max open tickets (optional)</label>
+        <input
+          id="d-capacity"
+          v-model="form.maxOpenTickets"
+          type="number"
+          min="0"
+          step="1"
+          placeholder="5 (default)"
+        />
 
         <label>Groups</label>
         <p v-if="!groups.length" class="muted small">No groups available.</p>

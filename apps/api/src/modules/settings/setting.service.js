@@ -5,6 +5,8 @@ const KEY_BASE_URL = 'llm_base_url';
 const KEY_MODEL = 'llm_model';
 const KEY_API_KEY = 'llm_api_key';
 const KEY_CHATBOT_ENABLED = 'chatbot_enabled';
+const KEY_DEFAULT_BUSINESS_HOURS = 'default_business_hours';
+const KEY_DEFAULT_MAX_OPEN_TICKETS = 'default_max_open_tickets';
 
 const DEFAULT_PROVIDER = 'gemini';
 
@@ -79,12 +81,25 @@ async function isChatbotEnabled() {
   return value !== 'false';
 }
 
+// Returns the stored default schedule, or null when it was never customized
+async function getDefaultBusinessHours() {
+  const raw = await getValue(KEY_DEFAULT_BUSINESS_HOURS);
+  if (!raw) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 module.exports = {
   KEY_PROVIDER,
   KEY_BASE_URL,
   KEY_MODEL,
   KEY_API_KEY,
   KEY_CHATBOT_ENABLED,
+  KEY_DEFAULT_BUSINESS_HOURS,
+  KEY_DEFAULT_MAX_OPEN_TICKETS,
   DEFAULT_PROVIDER,
   PROVIDERS,
   getValue,
@@ -92,4 +107,5 @@ module.exports = {
   remove,
   getChatbotConfig,
   isChatbotEnabled,
+  getDefaultBusinessHours,
 };

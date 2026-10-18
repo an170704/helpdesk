@@ -209,7 +209,7 @@ onUnmounted(() => {
         <thead>
           <tr>
             <th>Group</th>
-            <th>Members</th>
+            <th>Agents</th>
             <th>Tickets</th>
             <th class="menu-col"></th>
           </tr>
@@ -234,10 +234,10 @@ onUnmounted(() => {
                   </span>
                 </div>
                 <span class="muted small">
-                  {{ group.members.length }} member(s)
+                  {{ group.members.length }} agent(s)
                 </span>
               </div>
-              <span v-else class="muted small">No members</span>
+              <span v-else class="muted small">No agents</span>
             </td>
             <td class="muted">{{ group.ticket_count }}</td>
             <td class="menu-col" @click.stop>
@@ -283,12 +283,12 @@ onUnmounted(() => {
       ></textarea>
 
       <template v-if="editing">
-        <p class="muted small">Manage the group's members and categories from the group page.</p>
+        <p class="muted small">Manage the group's agents and categories from the group page.</p>
       </template>
 
       <label v-else class="checkbox-row">
         <input v-model="addMembersNext" type="checkbox" />
-        Add members in the next step
+        Add agents in the next step
       </label>
 
       <p v-if="formError" class="error">{{ formError }}</p>

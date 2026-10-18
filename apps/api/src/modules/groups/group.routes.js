@@ -18,5 +18,7 @@ router.delete('/:id', groupController.deleteGroup);
 router.put('/:id/members', groupController.setMembers);
 router.post('/:id/members', groupController.addMembers);
 router.delete('/:id/members/:userId', groupController.removeMember);
+router.put('/:id/business-hours', groupController.setBusinessHours);
+router.put('/:id/assignment-mode', groupController.setAssignmentMode);
 
 module.exports = router;

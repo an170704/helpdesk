@@ -36,6 +36,7 @@ const detailForm = ref({
   address: '',
   role: 'user',
   title: '',
+  max_open_tickets: '',
   is_active: true,
   group_ids: [],
 })
@@ -71,6 +72,8 @@ function syncDetailForm() {
     address: user.value.address || '',
     role: user.value.role,
     title: user.value.title || '',
+    max_open_tickets:
+      user.value.max_open_tickets == null ? '' : String(user.value.max_open_tickets),
     is_active: user.value.is_active,
     group_ids: overviewGroups.value.map((g) => g.id),
   }
@@ -119,6 +122,12 @@ async function saveDetails() {
     return
   }
 
+  const capacity = String(form.max_open_tickets ?? '').trim()
+  if (form.role === 'technician' && capacity && !/^\d+$/.test(capacity)) {
+    detailError.value = 'Max open tickets must be a non-negative integer'
+    return
+  }
+
   savingDetails.value = true
   try {
     await updateUser(user.value.id, {
@@ -128,6 +137,7 @@ async function saveDetails() {
       address: form.address.trim() || null,
       role: form.role,
       title: form.role === 'technician' ? form.title.trim() || null : null,
+      max_open_tickets: form.role === 'technician' && capacity ? Number(capacity) : null,
       is_active: form.is_active,
       group_ids: form.role === 'technician' ? form.group_ids : [],
     })
@@ -251,6 +261,16 @@ onMounted(load)
                   <label for="m-title">Label (optional)</label>
                   <input id="m-title" v-model="detailForm.title" type="text" placeholder="Agent (default)" />
 
+                  <label for="m-capacity">Max open tickets (optional)</label>
+                  <input
+                    id="m-capacity"
+                    v-model="detailForm.max_open_tickets"
+                    type="number"
+                    min="0"
+                    step="1"
+                    placeholder="5 (default)"
+                  />
+
                   <label>Groups</label>
                   <p v-if="!groups.length" class="muted small">No groups available.</p>
                   <MultiSelect
@@ -345,6 +365,16 @@ onMounted(load)
           <div v-if="stats.csat.total" class="detail-block">
             <span class="detail-label">Satisfaction</span>
             <span>{{ stats.csat.positivePercent }}% positive ({{ stats.csat.total }} rating(s))</span>
+          </div>
+
+          <div v-if="user.role === 'technician'" class="detail-block">
+            <span class="detail-label">Max open tickets</span>
+            <span>{{ user.max_open_tickets == null ? 'Default' : user.max_open_tickets }}</span>
+          </div>
+
+          <div v-if="user.role === 'technician'" class="detail-block">
+            <span class="detail-label">Last assigned</span>
+            <span>{{ user.last_assigned_at ? formatDate(user.last_assigned_at) : 'Never' }}</span>
           </div>
 
           <div class="detail-block">

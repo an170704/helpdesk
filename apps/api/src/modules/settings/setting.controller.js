@@ -1,7 +1,10 @@
 const AppError = require('../../utils/AppError');
+const businessHours = require('../../utils/businessHours');
 const settingService = require('./setting.service');
 
-const { PROVIDERS, KEY_PROVIDER, KEY_BASE_URL, KEY_MODEL, KEY_API_KEY, KEY_CHATBOT_ENABLED } = settingService;
+const { PROVIDERS, KEY_PROVIDER, KEY_BASE_URL, KEY_MODEL, KEY_API_KEY, KEY_CHATBOT_ENABLED, KEY_DEFAULT_BUSINESS_HOURS, KEY_DEFAULT_MAX_OPEN_TICKETS } = settingService;
+
+const DEFAULT_MAX_OPEN_TICKETS = 5;
 
 function maskKey(key) {
   if (!key) return '';
@@ -71,6 +74,55 @@ async function updateChatbot(req, res) {
   res.json({ message: 'Saved' });
 }
 
+async function readGeneralSettings() {
+  const [businessHoursRaw, maxOpenTicketsRaw] = await Promise.all([
+    settingService.getValue(KEY_DEFAULT_BUSINESS_HOURS),
+    settingService.getValue(KEY_DEFAULT_MAX_OPEN_TICKETS),
+  ]);
+
+  let defaultBusinessHours = businessHours.DEFAULT_BUSINESS_HOURS;
+  if (businessHoursRaw) {
+    try {
+      defaultBusinessHours = JSON.parse(businessHoursRaw);
+    } catch {
+      defaultBusinessHours = businessHours.DEFAULT_BUSINESS_HOURS;
+    }
+  }
+
+  const defaultMaxOpenTickets =
+    maxOpenTicketsRaw != null && /^\d+$/.test(maxOpenTicketsRaw)
+      ? Number(maxOpenTicketsRaw)
+      : DEFAULT_MAX_OPEN_TICKETS;
+
+  return {
+    default_business_hours: defaultBusinessHours,
+    default_max_open_tickets: defaultMaxOpenTickets,
+  };
+}
+
+async function getGeneral(req, res) {
+  res.json(await readGeneralSettings());
+}
+
+async function updateGeneral(req, res) {
+  const body = req.body || {};
+
+  if (body.default_business_hours !== undefined) {
+    const validated = businessHours.validateBusinessHours(body.default_business_hours);
+    await settingService.setValue(KEY_DEFAULT_BUSINESS_HOURS, JSON.stringify(validated));
+  }
+
+  if (body.default_max_open_tickets !== undefined) {
+    const value = Number(body.default_max_open_tickets);
+    if (!Number.isInteger(value) || value < 0) {
+      throw new AppError(400, 'default_max_open_tickets must be a non-negative integer');
+    }
+    await settingService.setValue(KEY_DEFAULT_MAX_OPEN_TICKETS, String(value));
+  }
+
+  res.json(await readGeneralSettings());
+}
+
 async function testChatbot(req, res) {
   const body = req.body || {};
   const config = await settingService.getChatbotConfig();
@@ -106,4 +158,4 @@ async function testChatbot(req, res) {
   }
 }
 
-module.exports = { getChatbot, updateChatbot, testChatbot };
+module.exports = { getChatbot, updateChatbot, testChatbot, getGeneral, updateGeneral };

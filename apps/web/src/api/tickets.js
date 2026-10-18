@@ -34,6 +34,10 @@ export function assignTicket(id, payload) {
   return api.patch(`/tickets/${id}/assign`, payload).then((res) => res.data.ticket)
 }
 
+export function autoAssignTicket(id) {
+  return api.post(`/tickets/${id}/auto-assign`).then((res) => res.data.ticket)
+}
+
 export function deleteTicket(id) {
   return api.delete(`/tickets/${id}`)
 }

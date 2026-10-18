@@ -28,7 +28,7 @@ async function findAll() {
 
 async function findOne(id) {
   const { rows } = await pool.query(
-    `SELECT g.id, g.name, g.description,
+    `SELECT g.id, g.name, g.description, g.business_hours, g.assignment_mode,
             (SELECT count(*)::int FROM tickets t WHERE t.group_id = g.id) AS ticket_count,
             COALESCE((
               SELECT json_agg(json_build_object('id', u.id, 'full_name', u.full_name, 'email', u.email))
@@ -168,6 +168,34 @@ async function addMembersByEmail(groupId, emails) {
   return { added: valid.length, unknown };
 }
 
+async function setAssignmentMode(groupId, mode) {
+  const { rows } = await pool.query(
+    `UPDATE groups
+     SET assignment_mode = $2
+     WHERE id = $1
+     RETURNING assignment_mode`,
+    [groupId, mode]
+  );
+  if (!rows[0]) {
+    throw new AppError(404, 'Group not found');
+  }
+  return rows[0].assignment_mode;
+}
+
+async function setBusinessHours(groupId, schedule) {
+  const { rows } = await pool.query(
+    `UPDATE groups
+     SET business_hours = $2
+     WHERE id = $1
+     RETURNING business_hours`,
+    [groupId, schedule]
+  );
+  if (!rows[0]) {
+    throw new AppError(404, 'Group not found');
+  }
+  return rows[0].business_hours;
+}
+
 async function removeMember(groupId, userId) {
   const { rowCount } = await pool.query(
     'DELETE FROM group_members WHERE group_id = $1 AND user_id = $2',
@@ -230,4 +258,6 @@ module.exports = {
   setMembers,
   addMembersByEmail,
   removeMember,
+  setAssignmentMode,
+  setBusinessHours,
 };

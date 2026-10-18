@@ -1,4 +1,5 @@
 const AppError = require('../../utils/AppError');
+const businessHours = require('../../utils/businessHours');
 const groupService = require('./group.service');
 
 function validateId(id) {
@@ -93,6 +94,39 @@ async function removeMember(req, res) {
   res.status(204).end();
 }
 
+const ASSIGNMENT_MODES = ['manual', 'round_robin', 'load_based'];
+
+async function setAssignmentMode(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  const mode = req.body && req.body.assignment_mode;
+  if (!ASSIGNMENT_MODES.includes(mode)) {
+    throw new AppError(400, `assignment_mode must be one of: ${ASSIGNMENT_MODES.join(', ')}`);
+  }
+
+  const saved = await groupService.setAssignmentMode(id, mode);
+  res.json({ assignment_mode: saved });
+}
+
+async function setBusinessHours(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  const schedule = req.body ? req.body.business_hours : undefined;
+
+  // null = clear the custom schedule and fall back to the workspace default
+  if (schedule === null) {
+    await groupService.setBusinessHours(id, null);
+    return res.json({ business_hours: null });
+  }
+
+  const validated = businessHours.validateBusinessHours(schedule);
+  const saved = await groupService.setBusinessHours(id, validated);
+
+  res.json({ business_hours: saved });
+}
+
 module.exports = {
   listGroups,
   listGroupOptions,
@@ -103,4 +137,6 @@ module.exports = {
   setMembers,
   addMembers,
   removeMember,
+  setAssignmentMode,
+  setBusinessHours,
 };

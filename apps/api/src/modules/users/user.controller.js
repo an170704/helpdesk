@@ -32,8 +32,8 @@ async function getUser(req, res) {
 }
 
 async function createUser(req, res) {
-  const { full_name, email, phone, address, role, title, password, group_ids } = req.body || {};
-
+  const { full_name, email, phone, address, role, title, max_open_tickets, password, group_ids } =
+    req.body || {};
   if (!full_name || !full_name.trim()) {
     throw new AppError(400, 'full_name is required');
   }
@@ -56,6 +56,7 @@ async function createUser(req, res) {
     address: address || null,
     role,
     title: role === 'technician' ? title || null : null,
+    maxOpenTickets: role === 'technician' ? validateMaxOpenTickets(max_open_tickets) : null,
     password,
     groupIds: group_ids === undefined ? [] : group_ids,
   });
@@ -70,6 +71,17 @@ function validateContactFields(body) {
   if (body.title !== undefined && body.title !== null && String(body.title).length > 100) {
     throw new AppError(400, 'title must not exceed 100 characters');
   }
+}
+
+function validateMaxOpenTickets(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  const number = Number(value);
+  if (!Number.isInteger(number) || number < 0) {
+    throw new AppError(400, 'max_open_tickets must be a non-negative integer');
+  }
+  return number;
 }
 
 async function getMe(req, res) {
@@ -94,7 +106,14 @@ async function updateMe(req, res) {
   }
   validateContactFields(body);
 
-  const user = await userService.update(req.user.id, body, undefined);
+  // Only self-service fields are allowed here (role/email/active/capacity are admin-only)
+  const changes = {};
+  if (body.full_name !== undefined) changes.full_name = body.full_name;
+  if (body.phone !== undefined) changes.phone = body.phone;
+  if (body.address !== undefined) changes.address = body.address;
+  if (body.title !== undefined) changes.title = body.title;
+
+  const user = await userService.update(req.user.id, changes, undefined);
   res.json({ user });
 }
 
@@ -118,6 +137,9 @@ async function updateUser(req, res) {
   }
   if (body.phone !== undefined && body.phone !== null && String(body.phone).length > 20) {
     throw new AppError(400, 'phone must not exceed 20 characters');
+  }
+  if (body.max_open_tickets !== undefined) {
+    body.max_open_tickets = validateMaxOpenTickets(body.max_open_tickets);
   }
 
   validateContactFields(body);

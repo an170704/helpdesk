@@ -1,12 +1,15 @@
 <script setup>
 import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getGroup, addGroupMembers, removeGroupMember } from '../../api/groups'
+import { getGroup, addGroupMembers, removeGroupMember, updateGroupBusinessHours, updateGroupAssignmentMode } from '../../api/groups'
 import { getTechnicians } from '../../api/users'
 import { getCategories, createCategory, deleteCategory } from '../../api/categories'
+import { getGeneralSettings } from '../../api/settings'
+import { DEFAULT_BUSINESS_HOURS, normalizeSchedule, scheduleSummary } from '../../utils/businessHours'
 import { categoryLabel } from '../../utils/categories'
 import { initials, avatarColor } from '../../utils/avatar'
 import ModalDialog from '../../components/ModalDialog.vue'
+import BusinessHoursEditor from '../../components/BusinessHoursEditor.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -29,6 +32,16 @@ const adding = ref(false)
 const addError = ref('')
 
 const savingCategories = ref(false)
+
+const defaultBusinessHours = ref(null)
+const customBusinessHours = ref(false)
+const businessHoursSchedule = ref(normalizeSchedule(DEFAULT_BUSINESS_HOURS))
+const savingHours = ref(false)
+const hoursError = ref('')
+
+const assignmentMode = ref('manual')
+const savingMode = ref(false)
+const modeError = ref('')
 
 let noticeTimer = null
 
@@ -82,6 +95,7 @@ function showNotice(text, type = 'ok') {
 async function loadGroup() {
   const groupData = await getGroup(route.params.id)
   group.value = groupData
+  assignmentMode.value = groupData.assignment_mode || 'manual'
 }
 
 async function loadAll() {
@@ -98,14 +112,66 @@ async function loadAll() {
   }
 
   try {
-    const [techs, cats] = await Promise.all([getTechnicians(), getCategories()])
+    const [techs, cats, general] = await Promise.all([
+      getTechnicians(),
+      getCategories(),
+      getGeneralSettings(),
+    ])
     technicians.value = techs
     categories.value = cats
+    defaultBusinessHours.value = normalizeSchedule(
+      general.default_business_hours || DEFAULT_BUSINESS_HOURS
+    )
+    initBusinessHours()
   } catch (err) {
     console.error('[group-detail] options fetch failed:', err)
     error.value = `Options fetch failed: ${err.response ? err.response.status + ' ' + (err.response.data?.message || '') : err.message}`
   } finally {
     loading.value = false
+  }
+}
+
+function initBusinessHours() {
+  const custom = group.value && group.value.business_hours
+  customBusinessHours.value = !!custom
+  businessHoursSchedule.value = normalizeSchedule(
+    custom || defaultBusinessHours.value || DEFAULT_BUSINESS_HOURS
+  )
+}
+
+async function saveAssignmentMode() {
+  modeError.value = ''
+  savingMode.value = true
+  try {
+    const saved = await updateGroupAssignmentMode(group.value.id, assignmentMode.value)
+    group.value = { ...group.value, assignment_mode: saved }
+    showNotice('Assignment mode updated')
+  } catch (err) {
+    modeError.value = err.response?.data?.message || 'Could not update the assignment mode'
+  } finally {
+    savingMode.value = false
+  }
+}
+
+async function saveBusinessHours() {
+  hoursError.value = ''
+  savingHours.value = true
+  try {
+    const payload = customBusinessHours.value
+      ? {
+          ...businessHoursSchedule.value,
+          holidays: businessHoursSchedule.value.holidays.filter(Boolean),
+        }
+      : null
+
+    const saved = await updateGroupBusinessHours(group.value.id, payload)
+    group.value = { ...group.value, business_hours: saved }
+    initBusinessHours()
+    showNotice('Business hours updated')
+  } catch (err) {
+    hoursError.value = err.response?.data?.message || 'Could not update business hours'
+  } finally {
+    savingHours.value = false
   }
 }
 
@@ -169,7 +235,7 @@ async function addAgents() {
     addOpen.value = false
     await loadGroup()
   } catch (err) {
-    addError.value = err.response?.data?.message || 'Could not add members'
+    addError.value = err.response?.data?.message || 'Could not add agents'
   } finally {
     adding.value = false
   }
@@ -248,17 +314,23 @@ onMounted(loadAll)
             </p>
           </div>
           <div class="group-meta">
-            <span class="badge badge-gray">{{ group.members.length }} member(s)</span>
+            <span class="badge badge-gray">{{ group.members.length }} agent(s)</span>
             <span class="badge badge-blue">{{ group.ticket_count }} ticket(s)</span>
           </div>
         </div>
 
         <div class="profile-tabs" style="margin-top: 14px">
           <button :class="{ active: tab === 'agents' }" @click="tab = 'agents'">
-            Members ({{ group.members.length }})
+            Agents ({{ group.members.length }})
           </button>
           <button :class="{ active: tab === 'categories' }" @click="tab = 'categories'">
             Categories ({{ assignedCategories.length }})
+          </button>
+          <button :class="{ active: tab === 'hours' }" @click="tab = 'hours'">
+            Business hours
+          </button>
+          <button :class="{ active: tab === 'assignment' }" @click="tab = 'assignment'">
+            Assignment
           </button>
         </div>
 
@@ -269,32 +341,38 @@ onMounted(loadAll)
                 <circle cx="11" cy="11" r="8" />
                 <path d="m21 21-4.3-4.3" />
               </svg>
-              <input v-model="memberSearch" type="text" placeholder="Search members..." />
+              <input v-model="memberSearch" type="text" placeholder="Search agents..." />
             </div>
             <div class="filters-right">
-              <button class="btn btn-small" @click="openAddAgents">Add members</button>
+              <button class="btn btn-small" @click="openAddAgents">Add agents</button>
             </div>
           </div>
 
-          <p v-if="!filteredMembers.length" class="muted">No members found.</p>
+          <p v-if="!filteredMembers.length" class="muted">No agents found.</p>
 
           <div v-else class="table-wrap">
             <table>
               <thead>
                 <tr>
-                  <th>Member</th>
+                  <th>Agent</th>
                   <th>Email</th>
                   <th class="menu-col"></th>
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="member in filteredMembers" :key="member.id">
+                <tr
+                  v-for="member in filteredMembers"
+                  :key="member.id"
+                  class="row-link"
+                  title="View agent details"
+                  @click="router.push(`/users/${member.id}`)"
+                >
                   <td>
                     <div class="member-cell">
                       <span class="avatar-sm" :class="avatarColor(member.full_name || member.email)">
                         {{ initials(member.full_name) }}
                       </span>
-                      <span>{{ member.full_name }}</span>
+                      <span class="agent-link">{{ member.full_name }}</span>
                     </div>
                   </td>
                   <td>{{ member.email }}</td>
@@ -311,7 +389,7 @@ onMounted(loadAll)
           </div>
         </template>
 
-        <template v-else>
+        <template v-else-if="tab === 'categories'">
           <p class="muted small" style="margin: 12px 0 4px">
             Categories owned by this group. Type a name to create one — it belongs to this group only.
           </p>
@@ -342,10 +420,64 @@ onMounted(loadAll)
             </button>
           </div>
         </template>
+
+        <template v-else-if="tab === 'hours'">
+          <p class="muted small" style="margin: 12px 0 8px">
+            Working schedule for this group (used for SLA and reporting). When off, the group follows the workspace default.
+          </p>
+
+          <label class="checkbox-row" style="margin-bottom: 10px">
+            <input v-model="customBusinessHours" type="checkbox" />
+            Use custom business hours for this group
+          </label>
+
+          <BusinessHoursEditor
+            v-if="customBusinessHours"
+            :schedule="businessHoursSchedule"
+            :disabled="savingHours"
+          />
+          <p v-else class="bh-summary muted small">
+            Default: {{ scheduleSummary(defaultBusinessHours) }}
+          </p>
+
+          <p v-if="hoursError" class="error">{{ hoursError }}</p>
+
+          <div class="row form-actions">
+            <button class="btn" type="button" :disabled="savingHours" @click="saveBusinessHours">
+              {{ savingHours ? 'Saving...' : 'Save business hours' }}
+            </button>
+          </div>
+        </template>
+
+        <template v-else>
+          <p class="muted small" style="margin: 12px 0 8px">
+            Choose how unassigned tickets routed to this group are distributed to its agents.
+          </p>
+
+          <div class="assignment-mode">
+            <label for="assignment-mode">Assignment mode</label>
+            <select id="assignment-mode" v-model="assignmentMode" :disabled="savingMode">
+              <option value="manual">Manual — the admin chooses the agent</option>
+              <option value="round_robin">Round-robin — rotate by oldest last assignment</option>
+              <option value="load_based">Load-based — fewest open tickets first</option>
+            </select>
+            <p class="field-hint muted small">
+              Agents at their open-ticket capacity are skipped. Business hours are configured on the Business hours tab.
+            </p>
+          </div>
+
+          <p v-if="modeError" class="error">{{ modeError }}</p>
+
+          <div class="row form-actions">
+            <button class="btn" type="button" :disabled="savingMode" @click="saveAssignmentMode">
+              {{ savingMode ? 'Saving...' : 'Save assignment mode' }}
+            </button>
+          </div>
+        </template>
       </section>
 
-      <ModalDialog :open="addOpen" title="Add members" @close="addOpen = false">
-        <label for="agent-input">Add members</label>
+      <ModalDialog :open="addOpen" title="Add agents" @close="addOpen = false">
+        <label for="agent-input">Add agents</label>
 
         <div class="chips-input" @click="agentInputEl && agentInputEl.focus()">
           <span v-for="chip in chips" :key="chip" class="chip">

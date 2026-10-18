@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getTickets, updateStatus, updatePriority, updateCategory, assignTicket, deleteTicket } from '../../api/tickets'
+import { getTickets, updateStatus, updatePriority, updateCategory, assignTicket, autoAssignTicket, deleteTicket } from '../../api/tickets'
 import { getTechnicians } from '../../api/users'
 import { getGroups } from '../../api/groups'
 import { getCategories } from '../../api/categories'
@@ -216,6 +216,42 @@ const STATUSES = ['pending', 'in_progress', 'resolved', 'closed']
 // Pending inline edits: { [ticketId]: { status?, priority?, assigned_to?, group_id? } }
 const pending = ref({})
 const applying = ref(false)
+const autoAssigning = ref(false)
+
+const autoAssignable = computed(() =>
+  tickets.value.filter((ticket) => {
+    if (ticket.assigned_to) return false
+    if (!['pending', 'in_progress'].includes(ticket.status)) return false
+    if (ticket.due_at && new Date(ticket.due_at).getTime() < Date.now()) return false
+    return true
+  })
+)
+
+async function runAutoAssign() {
+  const targets = autoAssignable.value
+  if (!targets.length) return
+
+  autoAssigning.value = true
+  let assigned = 0
+  try {
+    for (const ticket of targets) {
+      const updated = await autoAssignTicket(ticket.id)
+      if (updated.assigned_to) assigned += 1
+    }
+
+    showNotice(
+      assigned
+        ? `Auto-assigned ${assigned} of ${targets.length} ticket(s)`
+        : 'No ticket was assigned — only non-overdue tickets are auto-assigned; check the group mode and agent capacity',
+      assigned ? 'ok' : 'error'
+    )
+    await load()
+  } catch (err) {
+    showNotice(err.response?.data?.message || 'Auto-assign failed', 'error')
+  } finally {
+    autoAssigning.value = false
+  }
+}
 
 const pendingCount = computed(() =>
   Object.values(pending.value).reduce((sum, changes) => sum + Object.keys(changes).length, 0)
@@ -473,6 +509,20 @@ onMounted(() => {
         </button>
 
         <div class="filters-right">
+          <button
+            class="btn btn-ghost btn-small"
+            type="button"
+            :disabled="autoAssigning || !autoAssignable.length"
+            :title="
+              autoAssignable.length
+                ? 'Auto-assign non-overdue open tickets (tickets without a group fall back to General)'
+                : 'No unassigned, non-overdue open tickets to assign'
+            "
+            @click="runAutoAssign"
+          >
+            {{ autoAssigning ? 'Assigning...' : `Auto-assign (${autoAssignable.length})` }}
+          </button>
+
           <button
             v-if="pendingCount"
             class="btn btn-ghost btn-small"

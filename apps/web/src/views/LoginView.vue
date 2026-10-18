@@ -34,7 +34,7 @@ async function handleSubmit() {
 <template>
   <div class="login-page">
     <form class="login-card" @submit.prevent="handleSubmit">
-      <h1>Helpdesk</h1>
+      <h1>HurtDesk</h1>
       <p class="muted">Sign in to continue</p>
 
       <label for="email">Email</label>

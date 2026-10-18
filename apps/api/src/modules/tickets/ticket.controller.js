@@ -1,5 +1,6 @@
 const AppError = require('../../utils/AppError');
 const ticketService = require('./ticket.service');
+const assignmentService = require('./assignment.service');
 const { assertCanView, isInGroup } = require('./ticket.access');
 const feedbackService = require('../feedback/feedback.service');
 const userService = require('../users/user.service');
@@ -111,7 +112,7 @@ async function createTicket(req, res) {
     }
   }
 
-  const ticket = await ticketService.create({
+  let ticket = await ticketService.create({
     subject,
     description,
     priority,
@@ -122,6 +123,9 @@ async function createTicket(req, res) {
     createdBy,
     actorId: req.user.id,
   });
+
+  // Route to an agent automatically when the target group uses round-robin / load-based
+  ticket = await assignmentService.autoAssignTicket(ticket.id);
 
   res.status(201).json({ ticket });
 }
@@ -250,13 +254,26 @@ async function assignTicket(req, res) {
     }
   }
 
-  const ticket = await ticketService.assignTicket({
+  let ticket = await ticketService.assignTicket({
     ticketId: id,
     actorId: req.user.id,
     assignedTo,
     groupId,
   });
 
+  // Moving a ticket into an auto-routing group assigns an agent right away
+  if (hasGroupId && !hasAssignedTo && ticket.group_id && !ticket.assigned_to) {
+    ticket = await assignmentService.autoAssignTicket(id, { actorId: req.user.id });
+  }
+
+  res.json({ ticket });
+}
+
+async function autoAssignTicket(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  const ticket = await assignmentService.autoAssignTicket(id, { actorId: req.user.id });
   res.json({ ticket });
 }
 
@@ -287,6 +304,7 @@ module.exports = {
   updatePriority,
   updateCategory,
   assignTicket,
+  autoAssignTicket,
   deleteTicket,
   listHistory,
 };

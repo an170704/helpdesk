@@ -14,6 +14,7 @@ router.patch('/:id/status', requireRole('admin', 'technician'), ticketController
 router.patch('/:id/priority', requireRole('admin'), ticketController.updatePriority);
 router.patch('/:id/category', requireRole('admin'), ticketController.updateCategory);
 router.patch('/:id/assign', requireRole('admin'), ticketController.assignTicket);
+router.post('/:id/auto-assign', requireRole('admin'), ticketController.autoAssignTicket);
 router.delete('/:id', requireRole('admin'), ticketController.deleteTicket);
 
 module.exports = router;
