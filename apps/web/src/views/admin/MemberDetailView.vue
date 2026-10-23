@@ -5,12 +5,12 @@ import { useAuthStore } from '../../stores/auth'
 import { getUserOverview, updateUser, resetPassword } from '../../api/users'
 import { getGroups } from '../../api/groups'
 import { formatDate } from '../../utils/format'
-import { initials, avatarColor } from '../../utils/avatar'
 import { PRIORITY_LABEL } from '../../utils/status'
 import { roleLabel } from '../../utils/roles'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 import MultiSelect from '../../components/MultiSelect.vue'
+import AvatarUpload from '../../components/AvatarUpload.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -152,6 +152,17 @@ async function saveDetails() {
   }
 }
 
+async function onAvatarUploaded(url) {
+  try {
+    const updated = await updateUser(user.value.id, { avatar_url: url })
+    user.value = { ...user.value, ...updated }
+    if (isSelf.value) auth.setUser({ ...auth.user, ...updated })
+    showNotice('Avatar updated')
+  } catch (err) {
+    showNotice(err.response?.data?.message || 'Could not update the avatar', 'error')
+  }
+}
+
 async function askResetPassword() {
   const password = window.prompt(`New password for ${user.value.full_name} (at least 6 characters):`)
   if (password === null) return
@@ -186,8 +197,12 @@ onMounted(load)
       <div class="profile">
         <div class="profile-main">
           <div class="card profile-head">
-            <img v-if="user.avatar_url" :src="user.avatar_url" class="avatar-lg-img" alt="" />
-            <span v-else class="avatar-lg" :class="avatarColor(user.full_name || user.email)">{{ initials(user.full_name) }}</span>
+            <AvatarUpload
+              :src="user.avatar_url"
+              :name="user.full_name"
+              @uploaded="onAvatarUploaded"
+              @error="showNotice($event, 'error')"
+            />
 
             <div class="profile-info">
               <h2>

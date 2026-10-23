@@ -121,6 +121,7 @@ async function update(id, changes, groupIds) {
         : current.max_open_tickets,
     is_active: changes.is_active !== undefined ? changes.is_active : current.is_active,
     address: changes.address !== undefined ? changes.address : current.address,
+    avatar_url: changes.avatar_url !== undefined ? changes.avatar_url : current.avatar_url,
   };
 
   if (next.role !== 'technician') {
@@ -140,7 +141,8 @@ async function update(id, changes, groupIds) {
       const { rows } = await client.query(
         `UPDATE users
          SET full_name = $2, email = $3, phone = $4, role = $5, is_active = $6,
-             address = $7, title = $8, max_open_tickets = $9, updated_at = now()
+             address = $7, title = $8, max_open_tickets = $9, avatar_url = $10,
+             updated_at = now()
          WHERE id = $1
          RETURNING id, full_name, email, phone, role, title, max_open_tickets,
                    is_active, avatar_url, address, created_at`,
@@ -154,6 +156,7 @@ async function update(id, changes, groupIds) {
           next.address || null,
           next.title || null,
           next.max_open_tickets == null ? null : Number(next.max_open_tickets),
+          next.avatar_url || null,
         ]
       );
       const user = rows[0];

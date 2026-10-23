@@ -84,6 +84,19 @@ function validateMaxOpenTickets(value) {
   return number;
 }
 
+function validateAvatarUrl(value) {
+  if (value === undefined || value === null || value === '') {
+    return null;
+  }
+  if (typeof value !== 'string' || value.length > 500) {
+    throw new AppError(400, 'Invalid avatar_url');
+  }
+  if (!value.startsWith('/uploads/') || value.includes('..')) {
+    throw new AppError(400, 'avatar_url must be an uploaded file');
+  }
+  return value;
+}
+
 async function getMe(req, res) {
   const [user, groups] = await Promise.all([
     userService.findById(req.user.id),
@@ -112,6 +125,7 @@ async function updateMe(req, res) {
   if (body.phone !== undefined) changes.phone = body.phone;
   if (body.address !== undefined) changes.address = body.address;
   if (body.title !== undefined) changes.title = body.title;
+  if (body.avatar_url !== undefined) changes.avatar_url = validateAvatarUrl(body.avatar_url);
 
   const user = await userService.update(req.user.id, changes, undefined);
   res.json({ user });
@@ -140,6 +154,9 @@ async function updateUser(req, res) {
   }
   if (body.max_open_tickets !== undefined) {
     body.max_open_tickets = validateMaxOpenTickets(body.max_open_tickets);
+  }
+  if (body.avatar_url !== undefined) {
+    body.avatar_url = validateAvatarUrl(body.avatar_url);
   }
 
   validateContactFields(body);

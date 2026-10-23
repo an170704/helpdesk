@@ -6,11 +6,11 @@ import { getMe, updateMe } from '../../api/users'
 import { getTickets } from '../../api/tickets'
 import { getMyStats } from '../../api/stats'
 import { formatDate } from '../../utils/format'
-import { initials, avatarColor } from '../../utils/avatar'
 import { PRIORITY_LABEL } from '../../utils/status'
 import { roleLabel } from '../../utils/roles'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
+import AvatarUpload from '../../components/AvatarUpload.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -112,6 +112,17 @@ async function save() {
   }
 }
 
+async function onAvatarUploaded(url) {
+  try {
+    const updated = await updateMe({ avatar_url: url })
+    user.value = { ...user.value, ...updated }
+    auth.setUser({ ...auth.user, ...updated })
+    showNotice('Avatar updated')
+  } catch (err) {
+    showNotice(err.response?.data?.message || 'Could not update your avatar', 'error')
+  }
+}
+
 onMounted(load)
 </script>
 
@@ -128,8 +139,12 @@ onMounted(load)
       <div class="profile">
         <div class="profile-main">
           <div class="card profile-head">
-            <img v-if="user.avatar_url" :src="user.avatar_url" class="avatar-lg-img" alt="" />
-            <span v-else class="avatar-lg" :class="avatarColor(user.full_name || user.email)">{{ initials(user.full_name) }}</span>
+            <AvatarUpload
+              :src="user.avatar_url"
+              :name="user.full_name"
+              @uploaded="onAvatarUploaded"
+              @error="showNotice($event, 'error')"
+            />
 
             <div class="profile-info">
               <h2>
