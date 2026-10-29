@@ -62,6 +62,8 @@ CREATE TABLE tickets (
   created_by    INT NOT NULL REFERENCES users(id),
   assigned_to   INT REFERENCES users(id),
   group_id      INT REFERENCES groups(id),
+  resolution    TEXT,
+  bot_usable    BOOLEAN NOT NULL DEFAULT FALSE,
   reopen_count  INT NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -75,6 +77,7 @@ CREATE INDEX idx_tickets_created_by ON tickets(created_by);
 CREATE INDEX idx_tickets_assigned_to ON tickets(assigned_to);
 CREATE INDEX idx_tickets_group_id   ON tickets(group_id);
 CREATE INDEX idx_tickets_due_at     ON tickets(due_at);
+CREATE INDEX idx_tickets_bot_usable ON tickets(bot_usable) WHERE bot_usable = TRUE;
 
 -- 6. TICKET COMMENTS
 CREATE TABLE ticket_comments (

@@ -188,6 +188,45 @@ async function updateStatus({ ticketId, actorId, actorRole, status, note }) {
   return updated;
 }
 
+async function saveResolution({ ticketId, actorId, actorRole, resolution, botUsable }) {
+  const saved = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      'SELECT * FROM tickets WHERE id = $1 FOR UPDATE',
+      [ticketId]
+    );
+    const current = rows[0];
+    if (!current) {
+      throw new AppError(404, 'Ticket not found');
+    }
+    if (!['resolved', 'closed'].includes(current.status)) {
+      throw new AppError(400, 'Resolution can only be saved for resolved or closed tickets');
+    }
+    if (actorRole !== 'admin' && current.assigned_to !== actorId) {
+      throw new AppError(403, 'You can only update the resolution of tickets assigned to you');
+    }
+
+    const text = String(resolution || '').trim();
+
+    const { rows: updatedRows } = await client.query(
+      `UPDATE tickets
+       SET resolution = $2, bot_usable = $3, updated_at = now()
+       WHERE id = $1
+       RETURNING *`,
+      [ticketId, text || null, botUsable === true]
+    );
+
+    await client.query(
+      `INSERT INTO ticket_history (ticket_id, actor_id, action, note)
+       VALUES ($1, $2, 'resolution_saved', $3)`,
+      [ticketId, actorId, botUsable === true ? 'resolution shared with HelpBot' : 'resolution saved (not shared)']
+    );
+
+    return updatedRows[0];
+  });
+
+  return findById(saved.id);
+}
+
 async function updatePriority({ ticketId, actorId, priority }) {
   const ticket = await withTransaction(async (client) => {
     const { rows } = await client.query(
@@ -427,6 +466,7 @@ module.exports = {
   findAllByUser,
   findAllForTechnician,
   updateStatus,
+  saveResolution,
   updatePriority,
   updateCategory,
   assignTicket,

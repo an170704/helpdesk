@@ -441,6 +441,16 @@ th {
 
 .rating-card textarea { margin-top: 4px; }
 
+.resolution-card {
+  margin: 14px 0;
+  padding: 14px 16px;
+  background: #f7f9ff;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+
+.resolution-card textarea { margin-top: 4px; }
+
 .rating-buttons {
   display: flex;
   gap: 8px;

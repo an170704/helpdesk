@@ -20,6 +20,10 @@ export function updateStatus(id, status, note) {
   return api.patch(`/tickets/${id}/status`, { status, note }).then((res) => res.data.ticket)
 }
 
+export function saveResolution(id, payload) {
+  return api.patch(`/tickets/${id}/resolution`, payload).then((res) => res.data.ticket)
+}
+
 export function updatePriority(id, priority) {
   return api.patch(`/tickets/${id}/priority`, { priority }).then((res) => res.data.ticket)
 }

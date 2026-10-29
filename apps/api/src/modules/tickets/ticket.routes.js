@@ -11,6 +11,7 @@ router.get('/', ticketController.listTickets);
 router.get('/:id', ticketController.getTicket);
 router.get('/:id/history', ticketController.listHistory);
 router.patch('/:id/status', requireRole('admin', 'technician'), ticketController.updateStatus);
+router.patch('/:id/resolution', requireRole('admin', 'technician'), ticketController.saveResolution);
 router.patch('/:id/priority', requireRole('admin'), ticketController.updatePriority);
 router.patch('/:id/category', requireRole('admin'), ticketController.updateCategory);
 router.patch('/:id/assign', requireRole('admin'), ticketController.assignTicket);

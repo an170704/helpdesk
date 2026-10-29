@@ -2,7 +2,7 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
-import { getTicket, getHistory, getComments, createComment, createFeedback } from '../../api/tickets'
+import { getTicket, getHistory, getComments, createComment, createFeedback, saveResolution } from '../../api/tickets'
 import { getArticles } from '../../api/kb'
 import { PRIORITY_BADGE, PRIORITY_LABEL } from '../../utils/status'
 import { formatDate, timeAgo } from '../../utils/format'
@@ -43,6 +43,50 @@ const ratingChoice = ref('')
 const ratingComment = ref('')
 const ratingSending = ref(false)
 const ratingError = ref('')
+
+const resolutionText = ref('')
+const resolutionBot = ref(false)
+const savingResolution = ref(false)
+const resolutionError = ref('')
+const resolutionNotice = ref('')
+
+const canEditResolution = computed(
+  () => isStaff.value && ['resolved', 'closed'].includes(ticket.value?.status)
+)
+
+function syncResolution() {
+  resolutionText.value = ticket.value?.resolution || ''
+  resolutionBot.value = !!ticket.value?.bot_usable
+  resolutionError.value = ''
+  resolutionNotice.value = ''
+}
+
+async function submitResolution() {
+  resolutionError.value = ''
+  resolutionNotice.value = ''
+
+  const hasPublicComments = comments.value.some((comment) => !comment.is_internal)
+  if (resolutionBot.value && !resolutionText.value.trim() && !hasPublicComments) {
+    resolutionError.value = 'Add a public reply on this ticket or write a short summary first'
+    return
+  }
+
+  savingResolution.value = true
+  try {
+    const updated = await saveResolution(ticket.value.id, {
+      resolution: resolutionText.value.trim() || null,
+      bot_usable: resolutionBot.value,
+    })
+    ticket.value = { ...ticket.value, ...updated }
+    syncResolution()
+    resolutionNotice.value = 'HelpBot setting saved'
+    history.value = await getHistory(ticket.value.id)
+  } catch (err) {
+    resolutionError.value = err.response?.data?.message || 'Could not save the HelpBot setting'
+  } finally {
+    savingResolution.value = false
+  }
+}
 
 function feedbackBadge(rating) {
   if (rating === 'positive') return 'badge-green'
@@ -122,6 +166,7 @@ async function load() {
   error.value = ''
   try {
     ticket.value = await getTicket(route.params.id)
+    syncResolution()
     history.value = await getHistory(route.params.id)
     comments.value = await getComments(route.params.id)
   } catch (err) {
@@ -273,6 +318,31 @@ onUnmounted(() => clearInterval(commentsTimer))
         </p>
       </div>
 
+      <div v-if="canEditResolution" class="resolution-card">
+        <h3>HelpBot learning</h3>
+        <p class="muted small">
+          HelpBot reads the public conversation on this ticket. Add an optional summary if you want extra context.
+        </p>
+
+        <textarea
+          v-model="resolutionText"
+          rows="4"
+          placeholder="Optional summary, e.g. which fix worked..."
+        ></textarea>
+
+        <label class="checkbox-row">
+          <input v-model="resolutionBot" type="checkbox" />
+          Allow HelpBot to use this conversation
+        </label>
+
+        <p v-if="resolutionError" class="error">{{ resolutionError }}</p>
+        <p v-if="resolutionNotice" class="notice-ok">{{ resolutionNotice }}</p>
+
+        <button class="btn btn-small" type="button" :disabled="savingResolution" @click="submitResolution">
+          {{ savingResolution ? 'Saving...' : 'Save for HelpBot' }}
+        </button>
+      </div>
+
       <div class="card-head">
         <h3>Conversation</h3>
         <button class="btn btn-ghost btn-small" type="button" @click="refreshComments">Refresh</button>
@@ -373,6 +443,10 @@ onUnmounted(() => clearInterval(commentsTimer))
           <template v-else-if="entry.action === 'status_changed'">
             <b>{{ entry.actor_name }}</b>: {{ entry.from_status }} → <b>{{ entry.to_status }}</b>
             <span v-if="entry.note" class="muted">— "{{ entry.note }}"</span>
+          </template>
+          <template v-else-if="entry.action === 'resolution_saved'">
+            <b>{{ entry.actor_name }}</b> saved the resolution
+            <span v-if="entry.note" class="muted">— {{ entry.note }}</span>
           </template>
           <template v-else>
             <b>{{ entry.actor_name }}</b>

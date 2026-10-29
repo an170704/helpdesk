@@ -192,6 +192,32 @@ async function updateStatus(req, res) {
   res.json({ ticket });
 }
 
+async function saveResolution(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  const { resolution, bot_usable } = req.body || {};
+  if (resolution !== undefined && resolution !== null && typeof resolution !== 'string') {
+    throw new AppError(400, 'resolution must be a string');
+  }
+  if (typeof resolution === 'string' && resolution.length > 5000) {
+    throw new AppError(400, 'Resolution must not exceed 5000 characters');
+  }
+  if (bot_usable !== undefined && typeof bot_usable !== 'boolean') {
+    throw new AppError(400, 'bot_usable must be a boolean');
+  }
+
+  const ticket = await ticketService.saveResolution({
+    ticketId: id,
+    actorId: req.user.id,
+    actorRole: req.user.role,
+    resolution: typeof resolution === 'string' ? resolution : null,
+    botUsable: bot_usable === true,
+  });
+
+  res.json({ ticket });
+}
+
 async function updatePriority(req, res) {
   const { id } = req.params;
   validateId(id);
@@ -301,6 +327,7 @@ module.exports = {
   listTickets,
   getTicket,
   updateStatus,
+  saveResolution,
   updatePriority,
   updateCategory,
   assignTicket,
