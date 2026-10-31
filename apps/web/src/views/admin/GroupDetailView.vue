@@ -34,6 +34,7 @@ const addError = ref('')
 const savingCategories = ref(false)
 
 const defaultBusinessHours = ref(null)
+const defaultMaxOpenTickets = ref(5)
 const customBusinessHours = ref(false)
 const businessHoursSchedule = ref(normalizeSchedule(DEFAULT_BUSINESS_HOURS))
 const savingHours = ref(false)
@@ -50,15 +51,26 @@ const ROLE_BADGE = { admin: 'badge-admin', technician: 'badge-tech', user: 'badg
 const filteredMembers = computed(() => {
   if (!group.value) return []
 
+  const members = [...group.value.members].sort((a, b) => a.id - b.id)
   const query = memberSearch.value.trim().toLowerCase()
-  if (!query) return group.value.members
+  if (!query) return members
 
-  return group.value.members.filter(
+  return members.filter(
     (member) =>
       member.full_name.toLowerCase().includes(query) ||
       member.email.toLowerCase().includes(query)
   )
 })
+
+function memberCapacity(member) {
+  return member.max_open_tickets ?? defaultMaxOpenTickets.value
+}
+
+function memberLoadBadge(member) {
+  const capacity = memberCapacity(member)
+  if (!capacity) return 'badge-gray'
+  return member.open_tickets >= capacity ? 'badge-red' : 'badge-green'
+}
 
 const categoryInput = ref('')
 
@@ -122,6 +134,7 @@ async function loadAll() {
     defaultBusinessHours.value = normalizeSchedule(
       general.default_business_hours || DEFAULT_BUSINESS_HOURS
     )
+    defaultMaxOpenTickets.value = general.default_max_open_tickets ?? 5
     initBusinessHours()
   } catch (err) {
     console.error('[group-detail] options fetch failed:', err)
@@ -356,6 +369,7 @@ onMounted(loadAll)
                 <tr>
                   <th>Agent</th>
                   <th>Email</th>
+                  <th title="Open tickets / capacity">Tickets</th>
                   <th class="menu-col"></th>
                 </tr>
               </thead>
@@ -376,6 +390,11 @@ onMounted(loadAll)
                     </div>
                   </td>
                   <td>{{ member.email }}</td>
+                  <td>
+                    <span class="badge" :class="memberLoadBadge(member)" :title="`${member.open_tickets} open ticket(s)`">
+                      {{ member.open_tickets }}/{{ memberCapacity(member) }}
+                    </span>
+                  </td>
                   <td class="menu-col" @click.stop>
                     <button class="icon-btn icon-btn-danger" title="Remove from group" @click="removeMember(member)">
                       <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">

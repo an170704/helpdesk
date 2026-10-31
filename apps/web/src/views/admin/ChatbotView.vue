@@ -52,6 +52,7 @@ const baseUrl = ref('')
 const model = ref('')
 const apiKey = ref('')
 const enabled = ref(true)
+const useKb = ref(true)
 
 let noticeTimer = null
 
@@ -79,6 +80,7 @@ async function load() {
     baseUrl.value = settings.value.baseUrl
     model.value = settings.value.model
     enabled.value = settings.value.enabled !== false
+    useKb.value = settings.value.useKb !== false
   } catch (err) {
     error.value = err.response?.data?.message || 'Failed to load settings'
   } finally {
@@ -94,6 +96,7 @@ async function save() {
       base_url: baseUrl.value.trim(),
       model: model.value.trim(),
       enabled: enabled.value,
+      use_kb: useKb.value,
       ...(apiKey.value.trim() && { api_key: apiKey.value.trim() }),
     })
     apiKey.value = ''
@@ -144,6 +147,11 @@ onMounted(load)
       <label class="checkbox-row">
         <input v-model="enabled" type="checkbox" />
         Show the HelpBot chat bubble to users
+      </label>
+
+      <label class="checkbox-row">
+        <input v-model="useKb" type="checkbox" />
+        Use the Knowledge Base (turn off to answer only from resolved tickets)
       </label>
 
       <label for="provider">Provider</label>

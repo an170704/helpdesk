@@ -1,0 +1,44 @@
+[
+  {
+    "id": 68,
+    "full_name": "Agent T1",
+    "email": "t1@company.com",
+    "max_open_tickets": 3,
+    "last_assigned_at": "2026-10-17T09:19:47.344Z"
+  },
+  {
+    "id": 69,
+    "full_name": "Agent T2",
+    "email": "t2@company.com",
+    "max_open_tickets": 3,
+    "last_assigned_at": "2026-10-17T11:47:30.919Z"
+  },
+  {
+    "id": 70,
+    "full_name": "Agent T3",
+    "email": "t3@company.com",
+    "max_open_tickets": 4,
+    "last_assigned_at": "2026-10-17T11:47:30.936Z"
+  },
+  {
+    "id": 71,
+    "full_name": "Agent T4",
+    "email": "t4@company.com",
+    "max_open_tickets": 3,
+    "last_assigned_at": "2026-10-17T11:47:30.955Z"
+  },
+  {
+    "id": 72,
+    "full_name": "Agent T5",
+    "email": "t5@company.com",
+    "max_open_tickets": 3,
+    "last_assigned_at": "2026-10-17T11:47:30.975Z"
+  },
+  {
+    "id": 78,
+    "full_name": "Agent T6",
+    "email": "t6@company.com",
+    "max_open_tickets": 3,
+    "last_assigned_at": "2026-10-17T09:19:47.344Z"
+  }
+]

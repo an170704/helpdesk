@@ -1,8 +1,9 @@
 const AppError = require('../../utils/AppError');
+const pool = require('../../config/db');
 const businessHours = require('../../utils/businessHours');
 const settingService = require('./setting.service');
 
-const { PROVIDERS, KEY_PROVIDER, KEY_BASE_URL, KEY_MODEL, KEY_API_KEY, KEY_CHATBOT_ENABLED, KEY_DEFAULT_BUSINESS_HOURS, KEY_DEFAULT_MAX_OPEN_TICKETS } = settingService;
+const { PROVIDERS, KEY_PROVIDER, KEY_BASE_URL, KEY_MODEL, KEY_API_KEY, KEY_CHATBOT_ENABLED, KEY_CHATBOT_USE_KB, KEY_DEFAULT_BUSINESS_HOURS, KEY_DEFAULT_MAX_OPEN_TICKETS } = settingService;
 
 const DEFAULT_MAX_OPEN_TICKETS = 5;
 
@@ -14,6 +15,7 @@ function maskKey(key) {
 async function getChatbot(req, res) {
   const config = await settingService.getChatbotConfig();
   const enabled = await settingService.isChatbotEnabled();
+  const useKb = await settingService.isKbEnabled();
 
   res.json({
     settings: {
@@ -23,18 +25,26 @@ async function getChatbot(req, res) {
       apiKeySet: !!config.apiKey,
       apiKeyMasked: maskKey(config.apiKey),
       enabled,
+      useKb,
     },
   });
 }
 
 async function updateChatbot(req, res) {
-  const { provider, base_url, model, api_key, enabled } = req.body || {};
+  const { provider, base_url, model, api_key, enabled, use_kb } = req.body || {};
 
   if (enabled !== undefined) {
     if (typeof enabled !== 'boolean') {
       throw new AppError(400, 'enabled must be a boolean');
     }
     await settingService.setValue(KEY_CHATBOT_ENABLED, enabled ? 'true' : 'false');
+  }
+
+  if (use_kb !== undefined) {
+    if (typeof use_kb !== 'boolean') {
+      throw new AppError(400, 'use_kb must be a boolean');
+    }
+    await settingService.setValue(KEY_CHATBOT_USE_KB, use_kb ? 'true' : 'false');
   }
 
   if (provider !== undefined) {
@@ -123,6 +133,38 @@ async function updateGeneral(req, res) {
   res.json(await readGeneralSettings());
 }
 
+async function refreshExampleDue(req, res) {
+  const { rows } = await pool.query(
+    `UPDATE tickets
+     SET due_at = now() + interval '2 days', updated_at = now()
+     WHERE group_id IN (SELECT id FROM groups WHERE lower(name) = 'test')
+       AND subject ILIKE 'Example %'
+       AND status IN ('pending', 'in_progress')
+     RETURNING id`
+  );
+
+  res.json({ updated: rows.length });
+}
+
+async function resetAgentLastAssigned(req, res) {
+  const { rows } = await pool.query(
+    `UPDATE users AS u
+     SET last_assigned_at = v.last_assigned_at
+     FROM (VALUES
+       ('t1@company.com', timestamptz '2026-10-30 13:30:00+07'),
+       ('t2@company.com', timestamptz '2026-10-30 14:00:00+07'),
+       ('t3@company.com', timestamptz '2026-10-30 14:30:00+07'),
+       ('t4@company.com', timestamptz '2026-10-30 15:00:00+07'),
+       ('t5@company.com', timestamptz '2026-10-30 15:30:00+07'),
+       ('t6@company.com', timestamptz '2026-10-30 16:00:00+07')
+     ) AS v(email, last_assigned_at)
+     WHERE u.email = v.email
+     RETURNING u.id`
+  );
+
+  res.json({ updated: rows.length });
+}
+
 async function testChatbot(req, res) {
   const body = req.body || {};
   const config = await settingService.getChatbotConfig();
@@ -158,4 +200,12 @@ async function testChatbot(req, res) {
   }
 }
 
-module.exports = { getChatbot, updateChatbot, testChatbot, getGeneral, updateGeneral };
+module.exports = {
+  getChatbot,
+  updateChatbot,
+  testChatbot,
+  getGeneral,
+  updateGeneral,
+  refreshExampleDue,
+  resetAgentLastAssigned,
+};

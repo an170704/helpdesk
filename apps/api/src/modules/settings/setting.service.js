@@ -5,6 +5,7 @@ const KEY_BASE_URL = 'llm_base_url';
 const KEY_MODEL = 'llm_model';
 const KEY_API_KEY = 'llm_api_key';
 const KEY_CHATBOT_ENABLED = 'chatbot_enabled';
+const KEY_CHATBOT_USE_KB = 'chatbot_use_kb';
 const KEY_DEFAULT_BUSINESS_HOURS = 'default_business_hours';
 const KEY_DEFAULT_MAX_OPEN_TICKETS = 'default_max_open_tickets';
 
@@ -81,6 +82,12 @@ async function isChatbotEnabled() {
   return value !== 'false';
 }
 
+// The Knowledge Base is used unless the admin turns it off for ticket-only answers
+async function isKbEnabled() {
+  const value = await getValue(KEY_CHATBOT_USE_KB);
+  return value !== 'false';
+}
+
 // Returns the stored default schedule, or null when it was never customized
 async function getDefaultBusinessHours() {
   const raw = await getValue(KEY_DEFAULT_BUSINESS_HOURS);
@@ -98,6 +105,7 @@ module.exports = {
   KEY_MODEL,
   KEY_API_KEY,
   KEY_CHATBOT_ENABLED,
+  KEY_CHATBOT_USE_KB,
   KEY_DEFAULT_BUSINESS_HOURS,
   KEY_DEFAULT_MAX_OPEN_TICKETS,
   DEFAULT_PROVIDER,
@@ -107,5 +115,6 @@ module.exports = {
   remove,
   getChatbotConfig,
   isChatbotEnabled,
+  isKbEnabled,
   getDefaultBusinessHours,
 };

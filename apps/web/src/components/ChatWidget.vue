@@ -16,6 +16,19 @@ const messages = ref([
   },
 ])
 
+function newChat() {
+  if (sending.value) return
+  messages.value = [
+    {
+      role: 'assistant',
+      content:
+        'Hi! I am HelpBot. Describe your IT issue and I will try to help using our knowledge base.',
+    },
+  ]
+  input.value = ''
+  scrollDown()
+}
+
 async function scrollDown() {
   await nextTick()
   if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight
@@ -71,6 +84,7 @@ async function send() {
             <span class="chat-status">IT support assistant</span>
           </div>
         </div>
+        <button class="chat-new" type="button" title="Start a new chat" @click="newChat">New chat</button>
         <button class="chat-close" type="button" title="Close" @click="open = false">×</button>
       </div>
 

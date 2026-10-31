@@ -13,6 +13,20 @@ const MAX_CONVERSATION_CHARS = 1200;
 const MAX_HISTORY = 10;
 const REQUEST_TIMEOUT_MS = 45000;
 const RETRY_DELAY_MS = 1500;
+const NO_SOLUTION_REPLY =
+  "I cannot find a solution for this specific issue in my database. Please submit a support ticket from the 'New Ticket' page in the helpdesk menu, and a human agent will assist you shortly.";
+
+const STOPWORDS = new Set([
+  'the', 'and', 'for', 'are', 'but', 'not', 'you', 'your', 'all', 'any', 'can', 'had',
+  'has', 'have', 'her', 'his', 'how', 'its', 'may', 'our', 'out', 'own', 'she', 'too',
+  'use', 'was', 'who', 'why', 'will', 'with', 'what', 'when', 'where', 'which', 'while',
+  'this', 'that', 'these', 'those', 'from', 'into', 'over', 'under', 'again', 'further',
+  'then', 'once', 'here', 'there', 'about', 'above', 'below', 'after', 'before',
+  'between', 'both', 'each', 'few', 'more', 'most', 'other', 'some', 'such', 'only',
+  'same', 'than', 'very', 'just', 'also', 'could', 'should', 'would', 'does', 'doing',
+  'done', 'being', 'been', 'were', 'because', 'let', 'get', 'got', 'like', 'want',
+  'need', 'please', 'help', 'down', 'put', 'make', 'way', 'thing', 'things',
+]);
 
 // Fallback models per provider, tried when the configured model is missing or overloaded
 const FALLBACK_MODELS = {
@@ -36,9 +50,78 @@ function keywords(question) {
       String(question || '')
         .toLowerCase()
         .split(/[^a-z0-9]+/i)
-        .filter((word) => word.length > 2)
+        .filter((word) => word.length > 2 && !STOPWORDS.has(word))
     ),
   ].slice(0, 12);
+}
+
+function wordSet(value) {
+  return new Set(
+    String(value || '')
+      .toLowerCase()
+      .split(/[^a-z0-9]+/i)
+      .filter((word) => word.length > 2 && !STOPWORDS.has(word))
+  );
+}
+
+function isRelevant(words, matched) {
+  if (!words.length || !matched) return false;
+  if (words.length <= 2) return true;
+  return matched >= 2 && matched / words.length >= 0.5;
+}
+
+function scoreArticle(words, article) {
+  const titleWords = wordSet(article.title);
+  const bodyWords = wordSet(stripHtml(article.content));
+  let score = 0;
+  let matched = 0;
+
+  for (const word of words) {
+    let hit = false;
+    if (titleWords.has(word)) {
+      score += 3;
+      hit = true;
+    }
+    if (bodyWords.has(word)) {
+      score += 1;
+      hit = true;
+    }
+    if (hit) matched += 1;
+  }
+
+  return { score, matched };
+}
+
+function scoreTicket(words, ticket, conversationText) {
+  const subjectWords = wordSet(ticket.subject);
+  const descriptionWords = wordSet(ticket.description);
+  const resolutionWords = wordSet(ticket.resolution);
+  const conversationWords = wordSet(conversationText);
+  let score = 0;
+  let matched = 0;
+
+  for (const word of words) {
+    let hit = false;
+    if (subjectWords.has(word)) {
+      score += 3;
+      hit = true;
+    }
+    if (resolutionWords.has(word)) {
+      score += 2;
+      hit = true;
+    }
+    if (conversationWords.has(word)) {
+      score += 2;
+      hit = true;
+    }
+    if (descriptionWords.has(word)) {
+      score += 1;
+      hit = true;
+    }
+    if (hit) matched += 1;
+  }
+
+  return { score, matched };
 }
 
 function redact(value) {
@@ -49,16 +132,20 @@ function redact(value) {
 
 // Loads the published Knowledge Base plus resolved tickets shared with HelpBot,
 // then picks the most relevant articles/cases for the question.
-async function buildContext(question) {
+async function buildContext(question, { useKb = true } = {}) {
   const words = keywords(question);
 
+  const kbQuery = useKb
+    ? pool.query(
+        `SELECT id, title, content
+         FROM kb_articles
+         WHERE is_published = TRUE
+         ORDER BY updated_at DESC`
+      )
+    : Promise.resolve({ rows: [] });
+
   const [kbResult, ticketResult] = await Promise.all([
-    pool.query(
-      `SELECT id, title, content
-       FROM kb_articles
-       WHERE is_published = TRUE
-       ORDER BY updated_at DESC`
-    ),
+    kbQuery,
     pool.query(
       `SELECT id, subject, description, resolution
        FROM tickets
@@ -101,44 +188,26 @@ async function buildContext(question) {
   }
 
   const scoredArticles = kbResult.rows.map((article) => {
-    const title = article.title.toLowerCase();
-    const body = stripHtml(article.content).toLowerCase();
-    let score = 0;
-    for (const word of words) {
-      if (title.includes(word)) score += 3;
-      if (body.includes(word)) score += 1;
-    }
-    return { ...article, score };
+    const { score, matched } = scoreArticle(words, article);
+    return { ...article, score, matched };
   });
 
   const relevantArticles = scoredArticles
-    .filter((article) => article.score > 0)
+    .filter((article) => isRelevant(words, article.matched))
     .sort((a, b) => b.score - a.score);
-  const chosenArticles = (relevantArticles.length ? relevantArticles : scoredArticles).slice(
-    0,
-    MAX_ARTICLES
-  );
+  const chosenArticles = relevantArticles.slice(0, MAX_ARTICLES);
 
   const scoredTickets = ticketResult.rows.map((ticket) => {
     const conversation = (commentsByTicket.get(ticket.id) || []).slice(
       -MAX_CONVERSATION_MESSAGES
     );
-    const conversationText = conversation.map((message) => message.body).join(' ').toLowerCase();
-    const subject = ticket.subject.toLowerCase();
-    const description = stripHtml(ticket.description).toLowerCase();
-    const resolution = stripHtml(ticket.resolution).toLowerCase();
-    let score = 0;
-    for (const word of words) {
-      if (subject.includes(word)) score += 3;
-      if (resolution.includes(word)) score += 2;
-      if (conversationText.includes(word)) score += 2;
-      if (description.includes(word)) score += 1;
-    }
-    return { ...ticket, conversation, score };
+    const conversationText = conversation.map((message) => message.body).join(' ');
+    const { score, matched } = scoreTicket(words, ticket, conversationText);
+    return { ...ticket, conversation, score, matched };
   });
 
   const chosenTickets = scoredTickets
-    .filter((ticket) => ticket.score > 0)
+    .filter((ticket) => isRelevant(words, ticket.matched))
     .sort((a, b) => b.score - a.score)
     .slice(0, MAX_TICKETS);
 
@@ -213,6 +282,7 @@ function buildSystemPrompt(context) {
 
 4. ESCALATION (FALLBACK TO TICKETS)
 - If the answer is not in the Knowledge Base or the resolved past cases, or the user tried your steps and the issue persists, direct them to open a ticket.
+- Do not answer from general knowledge when the sources do not contain a solution.
 - Use this message: "I cannot find a solution for this specific issue in my database. Please submit a support ticket from the 'New Ticket' page in the helpdesk menu, and a human agent will assist you shortly."
 
 5. OUT OF SCOPE
@@ -291,7 +361,12 @@ async function ask({ question, history = [] }) {
     throw new AppError(400, 'The chatbot is not configured yet — add an API key in Chatbot settings');
   }
 
-  const context = await buildContext(question);
+  const useKb = await settingService.isKbEnabled();
+  const context = await buildContext(question, { useKb });
+
+  if (!context.trim()) {
+    return { reply: NO_SOLUTION_REPLY, model: 'no-source-fallback' };
+  }
 
   const messages = [
     { role: 'system', content: buildSystemPrompt(context) },

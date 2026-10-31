@@ -31,7 +31,18 @@ async function findOne(id) {
     `SELECT g.id, g.name, g.description, g.business_hours, g.assignment_mode,
             (SELECT count(*)::int FROM tickets t WHERE t.group_id = g.id) AS ticket_count,
             COALESCE((
-              SELECT json_agg(json_build_object('id', u.id, 'full_name', u.full_name, 'email', u.email))
+              SELECT json_agg(json_build_object(
+                'id', u.id,
+                'full_name', u.full_name,
+                'email', u.email,
+                'max_open_tickets', u.max_open_tickets,
+                'open_tickets', (
+                  SELECT count(*)::int
+                  FROM tickets t
+                  WHERE t.assigned_to = u.id
+                    AND t.status IN ('pending', 'in_progress')
+                )
+              ))
               FROM group_members gm
               JOIN users u ON u.id = gm.user_id
               WHERE gm.group_id = g.id

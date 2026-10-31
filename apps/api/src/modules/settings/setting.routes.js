@@ -12,5 +12,7 @@ router.put('/chatbot', settingController.updateChatbot);
 router.post('/chatbot/test', settingController.testChatbot);
 router.get('/general', settingController.getGeneral);
 router.put('/general', settingController.updateGeneral);
+router.post('/demo/refresh-example-due', settingController.refreshExampleDue);
+router.post('/demo/reset-agent-last-assigned', settingController.resetAgentLastAssigned);
 
 module.exports = router;

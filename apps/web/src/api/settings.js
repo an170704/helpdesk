@@ -19,3 +19,11 @@ export function getGeneralSettings() {
 export function saveGeneralSettings(payload) {
   return api.put('/settings/general', payload).then((res) => res.data)
 }
+
+export function refreshExampleDue() {
+  return api.post('/settings/demo/refresh-example-due').then((res) => res.data)
+}
+
+export function resetAgentLastAssigned() {
+  return api.post('/settings/demo/reset-agent-last-assigned').then((res) => res.data)
+}

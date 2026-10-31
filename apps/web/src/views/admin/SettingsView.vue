@@ -1,7 +1,14 @@
 <script setup>
+import { ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { refreshExampleDue, resetAgentLastAssigned } from '../../api/settings'
 
 const router = useRouter()
+
+const refreshingDemo = ref(false)
+const resettingAgents = ref(false)
+const demoNotice = ref('')
+const demoError = ref('')
 
 const ICONS = {
   zap: '<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>',
@@ -44,6 +51,48 @@ const sections = [
 function go(card) {
   if (card.to) router.push(card.to)
 }
+
+async function refreshDemoDueDates() {
+  if (!window.confirm('Refresh the due date of all Test group Example tickets to 2 days from now?')) {
+    return
+  }
+
+  refreshingDemo.value = true
+  demoNotice.value = ''
+  demoError.value = ''
+
+  try {
+    const result = await refreshExampleDue()
+    demoNotice.value = `Updated ${result.updated} Example ticket(s)`
+  } catch (err) {
+    demoError.value = err.response?.data?.message || 'Could not refresh the Example due dates'
+  } finally {
+    refreshingDemo.value = false
+  }
+}
+
+async function resetDemoAgentTimes() {
+  if (
+    !window.confirm(
+      'Reset the Last assigned time of T1–T6 to the afternoon demo schedule (13:30–16:00)?'
+    )
+  ) {
+    return
+  }
+
+  resettingAgents.value = true
+  demoNotice.value = ''
+  demoError.value = ''
+
+  try {
+    const result = await resetAgentLastAssigned()
+    demoNotice.value = `Updated ${result.updated} agent(s)`
+  } catch (err) {
+    demoError.value = err.response?.data?.message || 'Could not reset the agent times'
+  } finally {
+    resettingAgents.value = false
+  }
+}
 </script>
 
 <template>
@@ -83,6 +132,39 @@ function go(card) {
           </div>
         </div>
       </div>
+    </section>
+
+    <section class="settings-section">
+      <h3>Demo tools</h3>
+
+      <div class="card demo-tools">
+        <div>
+          <b>Refresh Example due dates</b>
+          <p class="muted small">
+            Admin-only helper for recordings: gives every Test group Example ticket a fresh due date 2 days from now.
+          </p>
+        </div>
+
+        <button class="btn btn-small" type="button" :disabled="refreshingDemo" @click="refreshDemoDueDates">
+          {{ refreshingDemo ? 'Refreshing...' : 'Refresh due dates' }}
+        </button>
+      </div>
+
+      <div class="card demo-tools" style="margin-top: 12px">
+        <div>
+          <b>Reset agent Last assigned</b>
+          <p class="muted small">
+            Admin-only helper for recordings: sets T1–T6 to the afternoon demo schedule (13:30, 14:00, 14:30, 15:00, 15:30, 16:00).
+          </p>
+        </div>
+
+        <button class="btn btn-small" type="button" :disabled="resettingAgents" @click="resetDemoAgentTimes">
+          {{ resettingAgents ? 'Resetting...' : 'Reset agent times' }}
+        </button>
+      </div>
+
+      <p v-if="demoNotice" class="notice-ok">{{ demoNotice }}</p>
+      <p v-if="demoError" class="error">{{ demoError }}</p>
     </section>
   </div>
 </template>
