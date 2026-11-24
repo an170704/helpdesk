@@ -17,10 +17,13 @@ async function createMany(userIds, { type, ticketId, message }) {
 }
 
 async function getAdminIds(excludeId) {
-  const { rows } = await pool.query(
-    `SELECT id FROM users WHERE role = 'admin' AND is_active = TRUE AND id <> $1`,
-    [excludeId]
-  );
+  const params = [];
+  let where = `role = 'admin' AND is_active = TRUE`;
+  if (excludeId != null) {
+    where += ' AND id <> $1';
+    params.push(excludeId);
+  }
+  const { rows } = await pool.query(`SELECT id FROM users WHERE ${where}`, params);
   return rows.map((r) => r.id);
 }
 

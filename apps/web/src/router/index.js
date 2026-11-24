@@ -109,6 +109,12 @@ const routes = [
         meta: { roles: ['admin'] },
       },
       {
+        path: 'chatbot/transcripts',
+        name: 'chatbot-transcripts',
+        component: () => import('../views/admin/ChatTranscriptsView.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
         path: 'assigned',
         name: 'assigned-tickets',
         component: () => import('../views/technician/AssignedTicketsView.vue'),

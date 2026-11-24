@@ -11,6 +11,7 @@ import { roleLabel } from '../../utils/roles'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 import AvatarUpload from '../../components/AvatarUpload.vue'
+import DropdownSelect from '../../components/DropdownSelect.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -31,6 +32,11 @@ const form = ref({ full_name: '', email: '', phone: '', address: '', role: 'user
 let noticeTimer = null
 
 const ROLE_BADGE = { admin: 'badge-admin', technician: 'badge-tech', user: 'badge-user' }
+const roleOptions = [
+  { value: 'user', label: 'User' },
+  { value: 'technician', label: 'Agent' },
+  { value: 'admin', label: 'Admin' },
+]
 
 const createdTickets = computed(() => tickets.value.filter((t) => t.created_by === auth.user?.id))
 const groupIds = computed(() => myGroups.value.map((group) => group.id))
@@ -186,11 +192,13 @@ onMounted(load)
                 <input id="p-address" v-model="form.address" type="text" placeholder="e.g. 123 Le Loi, District 1, HCMC" />
 
                 <label for="p-role">Role</label>
-                <select id="p-role" v-model="form.role" disabled>
-                  <option value="user">User</option>
-                  <option value="technician">Agent</option>
-                  <option value="admin">Admin</option>
-                </select>
+                <DropdownSelect
+                  id="p-role"
+                  v-model="form.role"
+                  :options="roleOptions"
+                  :disabled="true"
+                  aria-label="Role"
+                />
 
                 <template v-if="form.role === 'technician'">
                   <label for="p-title">Label (optional)</label>

@@ -129,7 +129,12 @@ onMounted(load)
 
 <template>
   <section class="card chatbot-form">
-    <h2>Chatbot settings</h2>
+    <div class="card-head">
+      <h2>Chatbot settings</h2>
+      <router-link to="/chatbot/transcripts" class="btn btn-ghost btn-small">
+        Chat transcripts
+      </router-link>
+    </div>
     <p class="muted">
       Connect the help assistant to any OpenAI-compatible LLM provider. The key is stored server-side and never sent back in full.
     </p>

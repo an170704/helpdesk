@@ -7,6 +7,7 @@ const open = ref(false)
 const input = ref('')
 const sending = ref(false)
 const listEl = ref(null)
+const sessionId = ref('')
 
 const messages = ref([
   {
@@ -26,6 +27,7 @@ function newChat() {
     },
   ]
   input.value = ''
+  sessionId.value = ''
   scrollDown()
 }
 
@@ -59,7 +61,12 @@ async function send() {
 
   try {
     const history = messages.value.slice(0, -1)
-    const { reply } = await sendChat({ question, history })
+    const { reply, session_id } = await sendChat({
+      question,
+      history,
+      sessionId: sessionId.value || undefined,
+    })
+    if (session_id) sessionId.value = session_id
     messages.value.push({ role: 'assistant', content: reply })
   } catch (err) {
     messages.value.push({

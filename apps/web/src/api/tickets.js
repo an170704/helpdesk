@@ -24,6 +24,14 @@ export function saveResolution(id, payload) {
   return api.patch(`/tickets/${id}/resolution`, payload).then((res) => res.data.ticket)
 }
 
+export function escalateOverdueTickets() {
+  return api.post('/tickets/escalate-overdue').then((res) => res.data)
+}
+
+export function reopenTicket(id) {
+  return api.post(`/tickets/${id}/reopen`).then((res) => res.data.ticket)
+}
+
 export function updatePriority(id, priority) {
   return api.patch(`/tickets/${id}/priority`, { priority }).then((res) => res.data.ticket)
 }

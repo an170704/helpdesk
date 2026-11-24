@@ -192,6 +192,24 @@ async function updateStatus(req, res) {
   res.json({ ticket });
 }
 
+async function escalateOverdue(req, res) {
+  const tickets = await ticketService.escalateOverdueTickets({ actorId: req.user.id });
+  res.json({ escalated: tickets.length, tickets });
+}
+
+async function reopenTicket(req, res) {
+  const { id } = req.params;
+  validateId(id);
+
+  const ticket = await ticketService.reopenTicket({
+    ticketId: id,
+    actorId: req.user.id,
+    actorRole: req.user.role,
+  });
+
+  res.json({ ticket });
+}
+
 async function saveResolution(req, res) {
   const { id } = req.params;
   validateId(id);
@@ -327,6 +345,8 @@ module.exports = {
   listTickets,
   getTicket,
   updateStatus,
+  escalateOverdue,
+  reopenTicket,
   saveResolution,
   updatePriority,
   updateCategory,

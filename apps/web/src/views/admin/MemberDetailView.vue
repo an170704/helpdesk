@@ -11,6 +11,7 @@ import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 import MultiSelect from '../../components/MultiSelect.vue'
 import AvatarUpload from '../../components/AvatarUpload.vue'
+import DropdownSelect from '../../components/DropdownSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -44,6 +45,16 @@ const detailForm = ref({
 let noticeTimer = null
 
 const ROLE_BADGE = { admin: 'badge-admin', technician: 'badge-tech', user: 'badge-user' }
+const roleOptions = computed(() => {
+  const options = [
+    { value: 'user', label: 'User' },
+    { value: 'technician', label: 'Agent' },
+  ]
+  if (user.value?.role === 'admin') {
+    return [{ value: 'admin', label: 'Admin' }, ...options]
+  }
+  return options
+})
 
 const isSelf = computed(() => user.value && auth.user?.id === user.value.id)
 
@@ -264,11 +275,13 @@ onMounted(load)
                 <input id="m-address" v-model="detailForm.address" type="text" placeholder="e.g. 123 Le Loi, District 1, HCMC" />
 
                 <label for="m-role">Role</label>
-                <select id="m-role" v-model="detailForm.role" :disabled="isSelf || user.role === 'admin'">
-                  <option v-if="user.role === 'admin'" value="admin">Admin</option>
-                  <option value="user">User</option>
-                  <option value="technician">Agent</option>
-                </select>
+                <DropdownSelect
+                  id="m-role"
+                  v-model="detailForm.role"
+                  :options="roleOptions"
+                  :disabled="isSelf || user.role === 'admin'"
+                  aria-label="Role"
+                />
                 <p v-if="isSelf" class="field-hint muted small">You cannot change your own role.</p>
                 <p v-else-if="user.role === 'admin'" class="field-hint muted small">Admin accounts cannot be edited here.</p>
 

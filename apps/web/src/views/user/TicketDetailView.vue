@@ -2,13 +2,14 @@
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../../stores/auth'
-import { getTicket, getHistory, getComments, createComment, createFeedback, saveResolution } from '../../api/tickets'
+import { getTicket, getHistory, getComments, createComment, createFeedback, saveResolution, reopenTicket } from '../../api/tickets'
 import { getArticles } from '../../api/kb'
 import { PRIORITY_BADGE, PRIORITY_LABEL } from '../../utils/status'
 import { formatDate, timeAgo } from '../../utils/format'
 import { sanitizeHtml } from '../../utils/sanitize'
 import StatusBadge from '../../components/StatusBadge.vue'
 import CategoryBadge from '../../components/CategoryBadge.vue'
+import DropdownSelect from '../../components/DropdownSelect.vue'
 
 const route = useRoute()
 const router = useRouter()
@@ -30,6 +31,9 @@ const sending = ref(false)
 const commentError = ref('')
 
 const isStaff = computed(() => auth.isAdmin || auth.isTechnician)
+const kbSelectOptions = computed(() =>
+  kbArticles.value.map((article) => ({ value: article.id, label: article.title }))
+)
 
 const canRate = computed(
   () =>
@@ -49,10 +53,22 @@ const resolutionBot = ref(false)
 const savingResolution = ref(false)
 const resolutionError = ref('')
 const resolutionNotice = ref('')
+const reopening = ref(false)
+const reopenError = ref('')
+const reopenNotice = ref('')
 
 const canEditResolution = computed(
   () => isStaff.value && ['resolved', 'closed'].includes(ticket.value?.status)
 )
+
+const canReopen = computed(() => {
+  const current = ticket.value
+  if (!current || !['resolved', 'closed'].includes(current.status)) return false
+  if (auth.isAdmin) return true
+  if (current.created_by !== auth.user?.id) return false
+  const finishedAt = current.closed_at || current.resolved_at
+  return !finishedAt || Date.now() - new Date(finishedAt).getTime() <= 7 * 24 * 60 * 60 * 1000
+})
 
 function syncResolution() {
   resolutionText.value = ticket.value?.resolution || ''
@@ -149,6 +165,11 @@ function onFilesChange(event) {
   files.value = Array.from(event.target.files)
 }
 
+function onKbPick(value) {
+  kbPick.value = value
+  insertKb()
+}
+
 function insertKb() {
   const id = kbPick.value
   if (!id) return
@@ -181,6 +202,25 @@ async function loadKb() {
     kbArticles.value = await getArticles()
   } catch {
     kbArticles.value = []
+  }
+}
+
+async function onReopen() {
+  if (!window.confirm('Reopen this ticket?')) return
+
+  reopening.value = true
+  reopenError.value = ''
+  reopenNotice.value = ''
+
+  try {
+    const updated = await reopenTicket(ticket.value.id)
+    ticket.value = { ...ticket.value, ...updated }
+    reopenNotice.value = 'Ticket reopened'
+    history.value = await getHistory(ticket.value.id)
+  } catch (err) {
+    reopenError.value = err.response?.data?.message || 'Could not reopen the ticket'
+  } finally {
+    reopening.value = false
   }
 }
 
@@ -244,6 +284,7 @@ onUnmounted(() => clearInterval(commentsTimer))
         <StatusBadge :status="ticket.status" />
         <span class="badge" :class="PRIORITY_BADGE[ticket.priority]">{{ PRIORITY_LABEL[ticket.priority] }}</span>
         <CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" />
+        <span v-if="ticket.escalated_at" class="badge badge-amber">Escalated</span>
       </div>
 
       <p v-if="ticket.assigned_name || ticket.group_name" class="muted small">
@@ -251,6 +292,15 @@ onUnmounted(() => clearInterval(commentsTimer))
         <template v-if="ticket.assigned_name && ticket.group_name"> · </template>
         <template v-if="ticket.group_name">Group: <b>{{ ticket.group_name }}</b></template>
       </p>
+
+      <div v-if="canReopen" class="reopen-row">
+        <button class="btn btn-ghost btn-small" type="button" :disabled="reopening" @click="onReopen">
+          {{ reopening ? 'Reopening...' : 'Reopen ticket' }}
+        </button>
+        <span class="muted small">Reopens as pending with a fresh SLA deadline.</span>
+        <p v-if="reopenError" class="error">{{ reopenError }}</p>
+        <p v-if="reopenNotice" class="notice-ok">{{ reopenNotice }}</p>
+      </div>
 
       <div class="description" v-html="sanitizeHtml(ticket.description)"></div>
 
@@ -408,12 +458,15 @@ onUnmounted(() => clearInterval(commentsTimer))
               </svg>
             </label>
 
-            <select v-if="isStaff" v-model="kbPick" class="kb-picker" @change="insertKb">
-              <option value="">Insert KB article...</option>
-              <option v-for="article in kbArticles" :key="article.id" :value="article.id">
-                {{ article.title }}
-              </option>
-            </select>
+            <DropdownSelect
+              v-if="isStaff"
+              class="kb-picker"
+              :model-value="kbPick"
+              :options="kbSelectOptions"
+              placeholder="Insert KB article..."
+              aria-label="Insert knowledge base article"
+              @update:model-value="onKbPick"
+            />
 
             <label v-if="isStaff" class="checkbox-row reply-internal">
               <input v-model="isInternal" type="checkbox" />
@@ -446,6 +499,14 @@ onUnmounted(() => clearInterval(commentsTimer))
           </template>
           <template v-else-if="entry.action === 'resolution_saved'">
             <b>{{ entry.actor_name }}</b> saved the resolution
+            <span v-if="entry.note" class="muted">— {{ entry.note }}</span>
+          </template>
+          <template v-else-if="entry.action === 'escalated'">
+            <b>{{ entry.actor_name || 'System' }}</b> escalated the ticket
+            <span v-if="entry.note" class="muted">— {{ entry.note }}</span>
+          </template>
+          <template v-else-if="entry.action === 'reopened'">
+            <b>{{ entry.actor_name }}</b> reopened the ticket
             <span v-if="entry.note" class="muted">— {{ entry.note }}</span>
           </template>
           <template v-else>

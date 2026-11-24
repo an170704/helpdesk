@@ -64,6 +64,7 @@ CREATE TABLE tickets (
   group_id      INT REFERENCES groups(id),
   resolution    TEXT,
   bot_usable    BOOLEAN NOT NULL DEFAULT FALSE,
+  escalated_at  TIMESTAMPTZ,
   reopen_count  INT NOT NULL DEFAULT 0,
   created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
@@ -78,6 +79,7 @@ CREATE INDEX idx_tickets_assigned_to ON tickets(assigned_to);
 CREATE INDEX idx_tickets_group_id   ON tickets(group_id);
 CREATE INDEX idx_tickets_due_at     ON tickets(due_at);
 CREATE INDEX idx_tickets_bot_usable ON tickets(bot_usable) WHERE bot_usable = TRUE;
+CREATE INDEX idx_tickets_escalated_at ON tickets(escalated_at) WHERE escalated_at IS NOT NULL;
 
 -- 6. TICKET COMMENTS
 CREATE TABLE ticket_comments (
@@ -157,3 +159,17 @@ CREATE TABLE ticket_feedback (
   created_by INT NOT NULL REFERENCES users(id),
   created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
+
+-- 13. HELP_BOT CHAT TRANSCRIPTS
+CREATE TABLE chat_messages (
+  id         SERIAL PRIMARY KEY,
+  user_id    INT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  session_id VARCHAR(64) NOT NULL,
+  role       VARCHAR(20) NOT NULL CHECK (role IN ('user', 'assistant')),
+  content    TEXT NOT NULL,
+  model      VARCHAR(120),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE INDEX idx_chat_messages_session ON chat_messages(session_id, created_at, id);
+CREATE INDEX idx_chat_messages_user ON chat_messages(user_id, created_at DESC);

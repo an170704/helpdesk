@@ -1,3 +1,4 @@
+const crypto = require('crypto');
 const pool = require('../../config/db');
 const AppError = require('../../utils/AppError');
 const settingService = require('../settings/setting.service');
@@ -351,7 +352,68 @@ async function callProvider({ provider, baseUrl, apiKey }, messages, model) {
   return reply;
 }
 
-async function ask({ question, history = [] }) {
+async function resolveSession(userId, requestedSessionId) {
+  const requested = String(requestedSessionId || '').trim();
+  if (!requested) return crypto.randomUUID();
+
+  const { rows } = await pool.query(
+    'SELECT user_id FROM chat_messages WHERE session_id = $1 LIMIT 1',
+    [requested]
+  );
+  if (rows[0] && rows[0].user_id !== userId) return crypto.randomUUID();
+  return requested;
+}
+
+async function persistMessage({ userId, sessionId, role, content, model = null }) {
+  if (!userId || !sessionId) return;
+  try {
+    await pool.query(
+      `INSERT INTO chat_messages (user_id, session_id, role, content, model)
+       VALUES ($1, $2, $3, $4, $5)`,
+      [userId, sessionId, role, String(content || ''), model]
+    );
+  } catch (err) {
+    // Chat must keep working even if transcript storage is unavailable.
+    console.error('Could not persist chat message:', err.message);
+  }
+}
+
+async function listSessions(limit = 100) {
+  const { rows } = await pool.query(
+    `SELECT m.session_id,
+            m.user_id,
+            u.full_name AS user_name,
+            u.email AS user_email,
+            min(m.created_at) AS started_at,
+            max(m.created_at) AS last_at,
+            count(*)::int AS message_count,
+            (SELECT last.content
+             FROM chat_messages last
+             WHERE last.session_id = m.session_id AND last.user_id = m.user_id
+             ORDER BY last.created_at DESC, last.id DESC
+             LIMIT 1) AS last_message
+     FROM chat_messages m
+     JOIN users u ON u.id = m.user_id
+     GROUP BY m.session_id, m.user_id, u.full_name, u.email
+     ORDER BY last_at DESC
+     LIMIT $1`,
+    [limit]
+  );
+  return rows;
+}
+
+async function findTranscript(sessionId) {
+  const { rows } = await pool.query(
+    `SELECT id, user_id, session_id, role, content, model, created_at
+     FROM chat_messages
+     WHERE session_id = $1
+     ORDER BY created_at ASC, id ASC`,
+    [sessionId]
+  );
+  return rows;
+}
+
+async function ask({ question, history = [], userId = null, sessionId = null }) {
   if (!(await settingService.isChatbotEnabled())) {
     throw new AppError(400, 'The chatbot is currently disabled by the administrator');
   }
@@ -361,11 +423,33 @@ async function ask({ question, history = [] }) {
     throw new AppError(400, 'The chatbot is not configured yet — add an API key in Chatbot settings');
   }
 
+  const activeSessionId = userId
+    ? await resolveSession(userId, sessionId)
+    : String(sessionId || crypto.randomUUID());
+
+  await persistMessage({
+    userId,
+    sessionId: activeSessionId,
+    role: 'user',
+    content: question,
+  });
+
   const useKb = await settingService.isKbEnabled();
   const context = await buildContext(question, { useKb });
 
   if (!context.trim()) {
-    return { reply: NO_SOLUTION_REPLY, model: 'no-source-fallback' };
+    await persistMessage({
+      userId,
+      sessionId: activeSessionId,
+      role: 'assistant',
+      content: NO_SOLUTION_REPLY,
+      model: 'no-source-fallback',
+    });
+    return {
+      reply: NO_SOLUTION_REPLY,
+      model: 'no-source-fallback',
+      session_id: activeSessionId,
+    };
   }
 
   const messages = [
@@ -388,7 +472,14 @@ async function ask({ question, history = [] }) {
     for (let attempt = 0; attempt < 2; attempt++) {
       try {
         const reply = await callProvider(config, messages, model);
-        return { reply, model };
+        await persistMessage({
+          userId,
+          sessionId: activeSessionId,
+          role: 'assistant',
+          content: reply,
+          model,
+        });
+        return { reply, model, session_id: activeSessionId };
       } catch (err) {
         lastError = err;
         // Retry transient errors once on the same model, then move on to the fallback model
@@ -406,4 +497,4 @@ async function ask({ question, history = [] }) {
   throw new AppError(502, (lastError && lastError.message) || 'Could not reach the AI provider');
 }
 
-module.exports = { ask, buildContext, buildSystemPrompt };
+module.exports = { ask, buildContext, buildSystemPrompt, listSessions, findTranscript };

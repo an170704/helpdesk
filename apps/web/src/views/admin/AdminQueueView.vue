@@ -1,7 +1,7 @@
 <script setup>
 import { computed, onMounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import { getTickets, updateStatus, updatePriority, updateCategory, assignTicket, autoAssignTicket, deleteTicket } from '../../api/tickets'
+import { getTickets, updateStatus, updatePriority, updateCategory, assignTicket, autoAssignTicket, escalateOverdueTickets, deleteTicket } from '../../api/tickets'
 import { getTechnicians } from '../../api/users'
 import { getGroups } from '../../api/groups'
 import { getCategories } from '../../api/categories'
@@ -12,6 +12,7 @@ import { initials, avatarColor } from '../../utils/avatar'
 import { membersOfGroup, groupsOfTechnician, byFullName } from '../../utils/groups'
 import CategoryBadge from '../../components/CategoryBadge.vue'
 import Pagination from '../../components/Pagination.vue'
+import DropdownSelect from '../../components/DropdownSelect.vue'
 
 const router = useRouter()
 const route = useRoute()
@@ -212,11 +213,50 @@ async function loadOptions() {
 }
 
 const STATUSES = ['pending', 'in_progress', 'resolved', 'closed']
+const PRIORITY_OPTIONS = [
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+]
+const STATUS_OPTIONS = STATUSES.map((status) => ({
+  value: status,
+  label: STATUS_LABEL[status],
+}))
+const STATUS_FILTER_OPTIONS = [
+  { value: 'all', label: 'All statuses' },
+  { value: 'open', label: 'Open' },
+  { value: 'pending', label: 'Pending' },
+  { value: 'in_progress', label: 'In progress' },
+  { value: 'resolved', label: 'Resolved' },
+  { value: 'closed', label: 'Closed' },
+]
+const PRIORITY_FILTER_OPTIONS = [
+  { value: 'all', label: 'All priorities' },
+  { value: 'low', label: 'Low' },
+  { value: 'medium', label: 'Medium' },
+  { value: 'high', label: 'High' },
+]
+const SORT_OPTIONS = [
+  { value: 'newest', label: 'Newest first' },
+  { value: 'oldest', label: 'Oldest first' },
+]
 
 // Pending inline edits: { [ticketId]: { status?, priority?, assigned_to?, group_id? } }
 const pending = ref({})
 const applying = ref(false)
 const autoAssigning = ref(false)
+const escalating = ref(false)
+
+const overdueUnescalated = computed(
+  () =>
+    tickets.value.filter(
+      (ticket) =>
+        !['resolved', 'closed'].includes(ticket.status) &&
+        ticket.due_at &&
+        new Date(ticket.due_at).getTime() < Date.now() &&
+        !ticket.escalated_at
+    ).length
+)
 
 const autoAssignable = computed(() =>
   tickets.value.filter((ticket) => {
@@ -226,6 +266,19 @@ const autoAssignable = computed(() =>
     return true
   })
 )
+
+async function runEscalation() {
+  escalating.value = true
+  try {
+    const result = await escalateOverdueTickets()
+    showNotice(`Escalated ${result.escalated} overdue ticket(s)`)
+    await load()
+  } catch (err) {
+    showNotice(err.response?.data?.message || 'Could not escalate overdue tickets', 'error')
+  } finally {
+    escalating.value = false
+  }
+}
 
 async function runAutoAssign() {
   const targets = autoAssignable.value
@@ -361,6 +414,17 @@ function assignmentOptions(ticket) {
   return options
 }
 
+function technicianSelectOptions(ticket) {
+  return technicianOptions(ticket).map((tech) => ({
+    value: String(tech.id),
+    label: tech.full_name,
+  }))
+}
+
+function assignmentSelectOptions(ticket) {
+  return [{ value: '', label: 'No group' }, ...assignmentOptions(ticket)]
+}
+
 function onAssignmentChange(ticket, value) {
   if (!value) {
     setPending(ticket, 'group_id', '')
@@ -468,29 +532,37 @@ onMounted(() => {
         <div class="head-actions">
           <span class="muted small">{{ filteredTickets.length }} / {{ tickets.length }} ticket(s)</span>
           <router-link to="/admin/tickets/new" class="btn btn-small">New ticket</router-link>
+          <button
+            v-if="overdueUnescalated"
+            class="btn btn-ghost btn-small"
+            :disabled="escalating"
+            @click="runEscalation"
+          >
+            {{ escalating ? 'Escalating...' : `Escalate overdue (${overdueUnescalated})` }}
+          </button>
           <button class="btn btn-ghost btn-small" :disabled="loading" @click="load">Refresh</button>
         </div>
       </div>
 
       <div class="filters">
-        <select v-model="statusFilter">
-          <option value="all">All statuses</option>
-          <option value="open">Open</option>
-          <option value="pending">Pending</option>
-          <option value="in_progress">In progress</option>
-          <option value="resolved">Resolved</option>
-          <option value="closed">Closed</option>
-        </select>
-        <select v-model="priorityFilter">
-          <option value="all">All priorities</option>
-          <option value="low">Low</option>
-          <option value="medium">Medium</option>
-          <option value="high">High</option>
-        </select>
-        <select v-model="sortOrder">
-          <option value="newest">Newest first</option>
-          <option value="oldest">Oldest first</option>
-        </select>
+        <DropdownSelect
+          v-model="statusFilter"
+          class="filter-select"
+          :options="STATUS_FILTER_OPTIONS"
+          aria-label="Status filter"
+        />
+        <DropdownSelect
+          v-model="priorityFilter"
+          class="filter-select"
+          :options="PRIORITY_FILTER_OPTIONS"
+          aria-label="Priority filter"
+        />
+        <DropdownSelect
+          v-model="sortOrder"
+          class="filter-select"
+          :options="SORT_OPTIONS"
+          aria-label="Sort order"
+        />
 
         <div class="search-box">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -610,52 +682,45 @@ onMounted(() => {
                 <span>· Created {{ timeAgo(ticket.created_at) }}</span>
                 <span :class="{ 'due-overdue': isOverdue(ticket) }">· Due {{ formatDate(ticket.due_at) }}</span>
                 <CategoryBadge :category="ticket.category_name" :parent="ticket.category_parent_name" />
+                <span v-if="ticket.escalated_at" class="badge badge-amber">Escalated</span>
               </div>
             </div>
 
             <div class="ticket-controls" @click.stop>
-              <select
-                class="inline-select priority-select"
+              <DropdownSelect
+                class="priority-select"
                 :class="'priority-' + fieldValue(ticket, 'priority', ticket.priority)"
-                :value="fieldValue(ticket, 'priority', ticket.priority)"
-                @change="setPending(ticket, 'priority', $event.target.value)"
-              >
-                <option value="low">Low</option>
-                <option value="medium">Medium</option>
-                <option value="high">High</option>
-              </select>
+                :model-value="fieldValue(ticket, 'priority', ticket.priority)"
+                :options="PRIORITY_OPTIONS"
+                aria-label="Priority"
+                @update:model-value="setPending(ticket, 'priority', $event)"
+              />
 
-              <select
-                class="inline-select tech-select"
-                :value="fieldValue(ticket, 'assigned_to', ticket.assigned_to || '')"
-                @change="onAssigneeChange(ticket, $event.target.value)"
-              >
-                <option value="">Unassigned</option>
-                <option v-for="tech in technicianOptions(ticket)" :key="tech.id" :value="tech.id">
-                  {{ tech.full_name }}
-                </option>
-              </select>
+              <DropdownSelect
+                class="tech-select"
+                :model-value="fieldValue(ticket, 'assigned_to', ticket.assigned_to || '')"
+                :options="technicianSelectOptions(ticket)"
+                placeholder="Unassigned"
+                aria-label="Assigned agent"
+                @update:model-value="onAssigneeChange(ticket, $event)"
+              />
 
-              <select
-                class="inline-select assignment-select"
-                :value="assignmentValue(ticket)"
-                @change="onAssignmentChange(ticket, $event.target.value)"
-              >
-                <option value="">No group</option>
-                <option v-for="opt in assignmentOptions(ticket)" :key="opt.value" :value="opt.value">
-                  {{ opt.label }}
-                </option>
-              </select>
+              <DropdownSelect
+                class="assignment-select"
+                :model-value="assignmentValue(ticket)"
+                :options="assignmentSelectOptions(ticket)"
+                placeholder="No group"
+                aria-label="Group and category"
+                @update:model-value="onAssignmentChange(ticket, $event)"
+              />
 
-              <select
-                class="inline-select status-select"
-                :value="fieldValue(ticket, 'status', ticket.status)"
-                @change="setPending(ticket, 'status', $event.target.value)"
-              >
-                <option v-for="status in STATUSES" :key="status" :value="status">
-                  {{ STATUS_LABEL[status] }}
-                </option>
-              </select>
+              <DropdownSelect
+                class="status-select"
+                :model-value="fieldValue(ticket, 'status', ticket.status)"
+                :options="STATUS_OPTIONS"
+                aria-label="Status"
+                @update:model-value="setPending(ticket, 'status', $event)"
+              />
             </div>
           </div>
         </div>

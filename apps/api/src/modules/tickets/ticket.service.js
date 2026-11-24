@@ -188,6 +188,120 @@ async function updateStatus({ ticketId, actorId, actorRole, status, note }) {
   return updated;
 }
 
+async function escalateOverdueTickets({ actorId = null } = {}) {
+  const escalated = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      `UPDATE tickets
+       SET escalated_at = now(), updated_at = now()
+       WHERE id IN (
+         SELECT id
+         FROM tickets
+         WHERE status IN ('pending', 'in_progress')
+           AND due_at IS NOT NULL
+           AND due_at < now()
+           AND escalated_at IS NULL
+         ORDER BY due_at ASC
+         FOR UPDATE SKIP LOCKED
+       )
+       RETURNING id, subject, assigned_to, created_by, priority, due_at`
+    );
+
+    for (const ticket of rows) {
+      await client.query(
+        `INSERT INTO ticket_history (ticket_id, actor_id, action, note)
+         VALUES ($1, $2, 'escalated', $3)`,
+        [
+          ticket.id,
+          actorId,
+          `Overdue since ${new Date(ticket.due_at).toISOString()} — escalated to the support lead`,
+        ]
+      );
+    }
+
+    return rows;
+  });
+
+  for (const ticket of escalated) {
+    if (ticket.assigned_to) {
+      await notificationService.createMany([ticket.assigned_to], {
+        type: 'escalated',
+        ticketId: ticket.id,
+        message: `Ticket #${ticket.id} is overdue and has been escalated: ${ticket.subject}`,
+      });
+    }
+    await notificationService.notifyAdmins(actorId, {
+      type: 'escalated',
+      ticketId: ticket.id,
+      message: `Overdue ticket escalated: #${ticket.id} ${ticket.subject}`,
+    });
+  }
+
+  return escalated;
+}
+
+async function reopenTicket({ ticketId, actorId, actorRole }) {
+  const updated = await withTransaction(async (client) => {
+    const { rows } = await client.query(
+      'SELECT * FROM tickets WHERE id = $1 FOR UPDATE',
+      [ticketId]
+    );
+    const current = rows[0];
+    if (!current) {
+      throw new AppError(404, 'Ticket not found');
+    }
+    if (!['resolved', 'closed'].includes(current.status)) {
+      throw new AppError(400, 'Only resolved or closed tickets can be reopened');
+    }
+
+    if (actorRole !== 'admin') {
+      if (current.created_by !== actorId) {
+        throw new AppError(403, 'You can only reopen your own tickets');
+      }
+      const finishedAt = current.closed_at || current.resolved_at;
+      const reopenWindowMs = 7 * 24 * 60 * 60 * 1000;
+      if (finishedAt && Date.now() - new Date(finishedAt).getTime() > reopenWindowMs) {
+        throw new AppError(400, 'This ticket can no longer be reopened (7-day window)');
+      }
+    }
+
+    const dueAt = new Date(Date.now() + SLA_HOURS[current.priority] * 3600000);
+
+    const { rows: updatedRows } = await client.query(
+      `UPDATE tickets
+       SET status = 'pending',
+           resolved_at = NULL,
+           closed_at = NULL,
+           escalated_at = NULL,
+           due_at = $2,
+           reopen_count = reopen_count + 1,
+           updated_at = now()
+       WHERE id = $1
+       RETURNING *`,
+      [ticketId, dueAt]
+    );
+
+    await client.query(
+      `INSERT INTO ticket_history (ticket_id, actor_id, action, note)
+       VALUES ($1, $2, 'reopened', $3)`,
+      [ticketId, actorId, `Reopened from ${current.status}`]
+    );
+
+    return updatedRows[0];
+  });
+
+  const ticket = await findById(updated.id);
+  const recipients = new Set(
+    [ticket.assigned_to, ticket.created_by].filter((id) => id && id !== actorId)
+  );
+  await notificationService.createMany([...recipients], {
+    type: 'reopened',
+    ticketId: ticket.id,
+    message: `Ticket #${ticket.id} was reopened: ${ticket.subject}`,
+  });
+
+  return ticket;
+}
+
 async function saveResolution({ ticketId, actorId, actorRole, resolution, botUsable }) {
   const saved = await withTransaction(async (client) => {
     const { rows } = await client.query(
@@ -466,6 +580,8 @@ module.exports = {
   findAllByUser,
   findAllForTechnician,
   updateStatus,
+  escalateOverdueTickets,
+  reopenTicket,
   saveResolution,
   updatePriority,
   updateCategory,
